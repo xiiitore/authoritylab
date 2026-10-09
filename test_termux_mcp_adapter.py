@@ -6,7 +6,10 @@ import unittest
 from unittest.mock import Mock
 
 from authoritylab import Task, ToolResult, WorkflowCore, WorkflowStatus
-from authoritylab.termux_mcp_adapter import register_read_only_mcp_tools
+from authoritylab.termux_mcp_adapter import (
+    read_only_mcp_governance_policy,
+    register_read_only_mcp_tools,
+)
 from authoritylab.tools import ToolRegistry
 
 
@@ -27,7 +30,7 @@ class TermuxMCPAdapterTests(unittest.TestCase):
             list_files=self.list_files,
             read_file=self.read_file,
         )
-        self.core = WorkflowCore(self.registry)
+        self.core = WorkflowCore(self.registry, policy=read_only_mcp_governance_policy())
 
     def test_registers_only_the_three_read_only_tools(self) -> None:
         self.assertEqual(
@@ -45,7 +48,8 @@ class TermuxMCPAdapterTests(unittest.TestCase):
                 list_files=self.list_files,
                 read_file=self.read_file,
             )
-        self.assertEqual(registry.registered_kinds(), ("read_file",))
+        self.assertEqual(registry.registered_kinds(), ())
+        self.assertTrue(registry.is_registered("read_file"))
 
     def test_status_calls_existing_tool(self) -> None:
         report = self.core.run(Task("t-status", "status"))
@@ -64,7 +68,7 @@ class TermuxMCPAdapterTests(unittest.TestCase):
     def test_list_files_calls_existing_tool(self) -> None:
         report = self.core.run(Task("t-list", "list_files"))
         self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual(report.tool_result.output, ["notes.txt"])
+        self.assertEqual(report.tool_result.output, {"files": ["notes.txt"]})
         self.list_files.assert_called_once_with()
 
     def test_read_file_calls_existing_tool_with_valid_relative_path(self) -> None:
@@ -72,7 +76,7 @@ class TermuxMCPAdapterTests(unittest.TestCase):
             Task("t-read", "read_file", {"path": "notes.txt"})
         )
         self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual(report.tool_result.output, "safe text")
+        self.assertEqual(report.tool_result.output, {"text": "safe text"})
         self.read_file.assert_called_once_with("notes.txt")
 
     def test_unknown_tool_is_blocked(self) -> None:

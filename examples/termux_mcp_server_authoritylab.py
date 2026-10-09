@@ -18,7 +18,7 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from authoritylab import GovernancePolicy, WorkflowCore
+from authoritylab import WorkflowCore
 from authoritylab.secure_paths import (
     is_confined_directory,
     list_confined_files,
@@ -27,6 +27,7 @@ from authoritylab.secure_paths import (
 from authoritylab.termux_mcp_adapter import (
     MCPAdapterError,
     dispatch_read_only_mcp_tool,
+    read_only_mcp_governance_policy,
     register_read_only_mcp_tools,
 )
 from authoritylab.tools import ToolRegistry
@@ -79,10 +80,7 @@ register_read_only_mcp_tools(
     list_files=_list_files_impl,
     read_file=_read_file_impl,
 )
-workflow = WorkflowCore(
-    registry,
-    GovernancePolicy(required_checks=("result_present", "tool_succeeded")),
-)
+workflow = WorkflowCore(registry, read_only_mcp_governance_policy())
 
 
 def _audit_report(event: Mapping[str, Any]) -> None:

@@ -12,11 +12,21 @@ from typing import Any
 from uuid import uuid4
 
 from .core import WorkflowCore
+from .governance import EvidenceSchema, GovernancePolicy
 from .models import Task, ToolResult, WorkflowReport, WorkflowStatus
 from .tools import ToolRegistry
 
 
 ALLOWED_TOOL_NAMES = frozenset({"status", "list_files", "read_file"})
+
+
+def read_only_mcp_governance_policy() -> GovernancePolicy:
+    """Return evidence schemas for the three restricted MCP operations."""
+    return GovernancePolicy(evidence_schemas=(
+        EvidenceSchema("status", ("status", "directory_exists", "directory", "max_file_bytes")),
+        EvidenceSchema("list_files", ("files",)),
+        EvidenceSchema("read_file", ("text",)),
+    ))
 
 
 class MCPAdapterError(RuntimeError):
@@ -86,13 +96,13 @@ def _list_files_output(value: Any) -> ToolResult:
             ok=False,
             error="list_files tool must return at most 100 direct file names",
         )
-    return ToolResult(ok=True, output=value)
+    return ToolResult(ok=True, output={"files": value})
 
 
 def _read_file_output(value: Any) -> ToolResult:
     if not isinstance(value, str):
         return ToolResult(ok=False, error="read_file tool must return text")
-    return ToolResult(ok=True, output=value)
+    return ToolResult(ok=True, output={"text": value})
 
 
 def _validated_read_path(task: Task) -> str | ToolResult:
@@ -133,7 +143,7 @@ def register_read_only_mcp_tools(
 
     if not callable(status) or not callable(list_files) or not callable(read_file):
         raise TypeError("all MCP tool arguments must be callable")
-    conflicts = ALLOWED_TOOL_NAMES.intersection(registry.registered_kinds())
+    conflicts = {name for name in ALLOWED_TOOL_NAMES if registry.is_registered(name)}
     if conflicts:
         raise ValueError(
             f"handlers already registered for: {', '.join(sorted(conflicts))}"
@@ -157,9 +167,9 @@ def register_read_only_mcp_tools(
             return path
         return _read_file_output(read_file(path))
 
-    registry.register("status", status_handler)
-    registry.register("list_files", list_files_handler)
-    registry.register("read_file", read_file_handler)
+    registry.register("status", status_handler, trusted=True)
+    registry.register("list_files", list_files_handler, trusted=True)
+    registry.register("read_file", read_file_handler, trusted=True)
 
 
 def dispatch_read_only_mcp_tool(
@@ -199,4 +209,9 @@ def dispatch_read_only_mcp_tool(
         detail = report.tool_result.error if report.tool_result is not None else None
         suffix = f": {detail}" if detail else ""
         raise MCPAdapterError(f"MCP operation {kind!r} did not pass ({report.status.value}){suffix}")
-    return report.tool_result.output
+    output = report.tool_result.output
+    if kind == "list_files":
+        return output["files"]
+    if kind == "read_file":
+        return output["text"]
+    return output
