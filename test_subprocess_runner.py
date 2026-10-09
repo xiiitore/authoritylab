@@ -80,6 +80,25 @@ class SubprocessHandlerRunnerTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlockedError):
             runner.run(echo_handler, Task("sub-6", "echo", {"object": object()}))
 
+    def test_android_runtime_skips_rlimit_as(self):
+        from unittest.mock import call, patch
+        import resource
+        import sys
+
+        runner = SubprocessHandlerRunner()
+        with patch.object(sys, "getandroidapilevel", lambda: 35, create=True), \
+             patch("resource.setrlimit") as setrlimit:
+            runner._limits()
+
+        self.assertNotIn(
+            call(resource.RLIMIT_AS, (runner.memory_limit_bytes, runner.memory_limit_bytes)),
+            setrlimit.call_args_list,
+        )
+        self.assertIn(
+            call(resource.RLIMIT_CPU, (5, 6)),
+            setrlimit.call_args_list,
+        )
+
     def test_invalid_resource_limits_are_rejected(self):
         with self.assertRaises(ValueError):
             SubprocessHandlerRunner(timeout_seconds=0)
