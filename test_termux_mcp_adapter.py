@@ -12,7 +12,12 @@ from authoritylab.tools import ToolRegistry
 
 class TermuxMCPAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.status = Mock(return_value={"status": "ready"})
+        self.status = Mock(return_value={
+            "status": "ready",
+            "directory_exists": True,
+            "directory": "/tmp/mcp-share",
+            "max_file_bytes": 200_000,
+        })
         self.list_files = Mock(return_value=["notes.txt"])
         self.read_file = Mock(return_value="safe text")
         self.registry = ToolRegistry()
