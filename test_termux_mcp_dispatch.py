@@ -48,6 +48,34 @@ class DispatchGateTests(unittest.TestCase):
         )
         self.status.assert_called_once_with()
 
+    def test_audit_sink_receives_report_without_file_content(self) -> None:
+        sink = Mock()
+        result = dispatch_read_only_mcp_tool(
+            self.core, kind="status", payload={}, audit_sink=sink
+        )
+        self.assertEqual(result["status"], "ready")
+        sink.assert_called_once()
+        report = sink.call_args.args[0]
+        self.assertEqual(report.status, WorkflowStatus.PASS)
+        self.assertEqual(report.audit["kind"], "status")
+        self.assertNotIn("output", report.audit)
+
+    def test_audit_sink_failure_withholds_result(self) -> None:
+        sink = Mock(side_effect=RuntimeError("audit unavailable"))
+        with self.assertRaisesRegex(MCPAdapterError, "audit sink failed"):
+            dispatch_read_only_mcp_tool(
+                self.core, kind="status", payload={}, audit_sink=sink
+            )
+        self.status.assert_called_once_with()
+
+    def test_invalid_audit_sink_is_rejected_before_workflow(self) -> None:
+        core = Mock()
+        with self.assertRaisesRegex(MCPAdapterError, "audit_sink must be callable"):
+            dispatch_read_only_mcp_tool(
+                core, kind="status", payload={}, audit_sink="not-callable"  # type: ignore[arg-type]
+            )
+        core.run.assert_not_called()
+
     def test_unknown_operation_is_rejected_before_workflow(self) -> None:
         core = Mock()
         with self.assertRaises(MCPAdapterError):
