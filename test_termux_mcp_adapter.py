@@ -121,7 +121,7 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         self.list_files.return_value = ["notes.txt", 7]
         report = self.core.run(Task("t-list-malformed", "list_files"))
         self.assertEqual(report.status, WorkflowStatus.FAIL)
-        self.assertIn("list of strings", report.tool_result.error)
+        self.assertIn("direct file names", report.tool_result.error)
 
     def test_list_files_rejects_path_entries(self) -> None:
         self.list_files.return_value = ["../secret.txt"]
