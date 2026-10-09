@@ -23,12 +23,15 @@ jobs:
           python -m pip install -e . pytest
       - name: Start isolated local registry
         run: |
-          docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 registry:2
+          # Use the public Amazon ECR mirror to avoid Docker Hub anonymous pull limits.
+          docker pull public.ecr.aws/docker/library/registry:2
+          docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 public.ecr.aws/docker/library/registry:2
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:5000/v2/ >/dev/null; then exit 0; fi
             sleep 1
           done
           echo "local registry did not become ready" >&2
+          docker logs authoritylab-registry || true
           exit 1
       - name: Build and publish ephemeral test image to local registry
         run: |
