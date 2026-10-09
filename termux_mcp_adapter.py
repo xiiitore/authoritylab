@@ -26,7 +26,22 @@ class MCPAdapterError(RuntimeError):
 StatusTool = Callable[[], Any]
 ListFilesTool = Callable[[], Any]
 ReadFileTool = Callable[[str], Any]
-AuditSink = Callable[[WorkflowReport], None]
+AuditSink = Callable[[Mapping[str, Any]], None]
+
+
+def _audit_event(report: WorkflowReport) -> dict[str, Any]:
+    """Build a metadata-only event; never pass tool output to audit sinks."""
+    return {
+        "audit": dict(report.audit),
+        "status": report.status.value,
+        "checks": [
+            {"name": check.name, "status": check.status.value}
+            for check in report.checks
+        ],
+        "tool_succeeded": (
+            report.tool_result.ok if report.tool_result is not None else None
+        ),
+    }
 
 
 def _empty_payload(task: Task) -> ToolResult | None:
@@ -177,7 +192,7 @@ def dispatch_read_only_mcp_tool(
     )
     if audit_sink is not None:
         try:
-            audit_sink(report)
+            audit_sink(_audit_event(report))
         except Exception:
             raise MCPAdapterError("MCP audit sink failed; result withheld") from None
     if report.status != WorkflowStatus.PASS or report.tool_result is None:
