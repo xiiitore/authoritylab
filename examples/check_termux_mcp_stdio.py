@@ -68,12 +68,12 @@ async def main() -> None:
             print("PASS: MCP initialize and exact three-tool allowlist")
 
             status = await session.call_tool("status", {})
-            if status.isError:
+            if status.is_error:
                 raise AssertionError("status tool returned an MCP error")
             print("PASS: status tool call over stdio")
 
             listing = await session.call_tool("list_files", {})
-            if listing.isError:
+            if listing.is_error:
                 raise AssertionError("list_files tool returned an MCP error")
             print("PASS: list_files tool call over stdio")
 
@@ -83,7 +83,7 @@ async def main() -> None:
                 read_result = await session.call_tool(
                     "read_file", {"path": names_in_share[0]}
                 )
-                if read_result.isError:
+                if read_result.is_error:
                     raise AssertionError("read_file failed on a listed file")
                 print("PASS: read_file tool call over stdio (content withheld)")
             else:
@@ -92,7 +92,7 @@ async def main() -> None:
             rejected = await session.call_tool(
                 "read_file", {"path": "../authoritylab-outside-root-check"}
             )
-            if not rejected.isError:
+            if not rejected.is_error:
                 raise AssertionError("parent-traversal read was not rejected")
             print("PASS: parent-traversal request rejected over stdio")
 
