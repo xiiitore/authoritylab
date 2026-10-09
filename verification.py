@@ -9,6 +9,12 @@ from .models import CheckResult, CheckStatus, ToolResult, WorkflowStatus
 class ResultVerifier:
     def verify(self, result: ToolResult, policy: GovernancePolicy) -> tuple[tuple[CheckResult, ...], WorkflowStatus]:
         checks: list[CheckResult] = []
+        if not policy.required_checks:
+            checks.append(CheckResult(
+                "policy_nonempty",
+                CheckStatus.BLOCKED,
+                "no required checks are configured",
+            ))
         for name in policy.required_checks:
             if name == "result_present":
                 present = result.output is not None

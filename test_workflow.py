@@ -2,6 +2,7 @@ import unittest
 
 from authoritylab import GovernancePolicy, Task, ToolResult, WorkflowCore, WorkflowStatus
 from authoritylab.tools import ToolRegistry
+from authoritylab.verification import ResultVerifier
 
 
 class WorkflowTests(unittest.TestCase):
@@ -57,6 +58,56 @@ class WorkflowTests(unittest.TestCase):
     def test_unknown_policy_check_rejected(self):
         with self.assertRaises(ValueError):
             GovernancePolicy(required_checks=("imaginary_check",))
+
+    def test_verifier_blocks_empty_policy_if_validation_is_bypassed(self):
+        policy = object.__new__(GovernancePolicy)
+        object.__setattr__(policy, "required_checks", ())
+        checks, status = ResultVerifier().verify(
+            ToolResult(ok=True, output={"x": 1}), policy
+        )
+        self.assertEqual(status, WorkflowStatus.BLOCKED)
+        self.assertEqual(len(checks), 1)
+
+    def test_empty_policy_rejected(self):
+        with self.assertRaises(ValueError):
+            GovernancePolicy(required_checks=())
+
+    def test_non_tuple_policy_rejected(self):
+        with self.assertRaises(TypeError):
+            GovernancePolicy(required_checks=["tool_succeeded"])
+
+    def test_tool_result_requires_actual_boolean(self):
+        with self.assertRaises(TypeError):
+            ToolResult(ok="yes", output={"x": 1})
+
+    def test_tool_result_error_must_be_string_or_none(self):
+        with self.assertRaises(TypeError):
+            ToolResult(ok=False, error=123)
+
+    def test_non_callable_handler_rejected_at_registration(self):
+        with self.assertRaises(TypeError):
+            self.registry.register("bad-handler", None)
+
+    def test_handler_names_are_normalized(self):
+        self.registry.register(
+            " echo ",
+            lambda task: ToolResult(ok=True, output="x"),
+        )
+        with self.assertRaises(ValueError):
+            self.registry.register(
+                "echo",
+                lambda task: ToolResult(ok=True, output="y"),
+            )
+        report = self.core.run(Task("t-8", "echo"))
+        self.assertEqual(report.status, WorkflowStatus.PASS)
+
+    def test_task_rejects_invalid_field_types(self):
+        with self.assertRaises(TypeError):
+            Task(None, "echo")
+        with self.assertRaises(TypeError):
+            Task("t-9", 123)
+        with self.assertRaises(TypeError):
+            Task("t-10", "echo", payload=None)
 
     def test_policy_can_require_only_selected_checks(self):
         registry = ToolRegistry()

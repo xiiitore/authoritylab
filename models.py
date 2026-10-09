@@ -28,6 +28,12 @@ class Task:
     payload: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.task_id, str):
+            raise TypeError("task_id must be a string")
+        if not isinstance(self.kind, str):
+            raise TypeError("kind must be a string")
+        if not isinstance(self.payload, Mapping):
+            raise TypeError("payload must be a mapping")
         if not self.task_id.strip():
             raise ValueError("task_id must not be empty")
         if not self.kind.strip():
@@ -39,6 +45,12 @@ class ToolResult:
     ok: bool
     output: Any = None
     error: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.ok) is not bool:
+            raise TypeError("ok must be a bool")
+        if self.error is not None and not isinstance(self.error, str):
+            raise TypeError("error must be a string or None")
 
 
 @dataclass(frozen=True, slots=True)

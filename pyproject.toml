@@ -12,5 +12,6 @@ license = { text = "MIT" }
 authors = [{ name = "AuthorityLab contributors" }]
 dependencies = []
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["authoritylab"]
+package-dir = { "authoritylab" = "." }
