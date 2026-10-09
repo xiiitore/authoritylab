@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .audit_log import DurableAuditLog
+from .execution import ExecutionBlockedError, HandlerRunner, InProcessRunner
 from .governance import GovernancePolicy
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
 from .tools import ToolRegistry
@@ -19,13 +20,17 @@ class WorkflowCore:
         policy: GovernancePolicy | None = None,
         verifier: ResultVerifier | None = None,
         audit_log: DurableAuditLog | None = None,
+        execution_runner: HandlerRunner | None = None,
     ) -> None:
         if audit_log is not None and not isinstance(audit_log, DurableAuditLog):
             raise TypeError("audit_log must be a DurableAuditLog or None")
+        if execution_runner is not None and not callable(getattr(execution_runner, "run", None)):
+            raise TypeError("execution_runner must provide a callable run method")
         self.registry = registry
         self.policy = policy or GovernancePolicy()
         self.verifier = verifier or ResultVerifier()
         self.audit_log = audit_log
+        self.execution_runner = execution_runner if execution_runner is not None else InProcessRunner()
 
     def run(self, task: Task) -> WorkflowReport:
         handler = self.registry.resolve(task.kind)
@@ -39,12 +44,21 @@ class WorkflowCore:
             return self._finish(task, None, WorkflowStatus.BLOCKED, None, (), audit)
 
         try:
-            result = handler(task)
+            result = self.execution_runner.run(handler, task)
             if not isinstance(result, ToolResult):
                 result = ToolResult(
                     ok=False,
-                    error="handler returned a non-ToolResult value",
+                    error="execution backend returned a non-ToolResult value",
                 )
+        except ExecutionBlockedError:
+            result = ToolResult(ok=False, error="execution backend blocked")
+            checks = (CheckResult(
+                "execution_backend",
+                CheckStatus.BLOCKED,
+                "configured execution backend could not safely accept the task",
+            ),)
+            audit = self._audit(task, task.kind, "execution backend blocked", result, checks, WorkflowStatus.BLOCKED)
+            return self._finish(task, task.kind, WorkflowStatus.BLOCKED, result, checks, audit)
         except Exception as exc:
             result = ToolResult(
                 ok=False,
@@ -69,7 +83,6 @@ class WorkflowCore:
             try:
                 metadata = self.audit_log.append(audit)
             except Exception:
-                # A required durable audit failure must not leave the report PASS.
                 checks = checks + (CheckResult(
                     "audit_persisted",
                     CheckStatus.FAIL,
