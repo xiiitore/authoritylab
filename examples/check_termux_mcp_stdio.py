@@ -83,6 +83,19 @@ async def main() -> None:
                 if status.is_error:
                     raise AssertionError("status tool returned an MCP error")
                 print("PASS: status tool call over stdio")
+                status_data = getattr(status, "structuredContent", None)
+                if isinstance(status_data, dict):
+                    status_fields = status_data.get("result", status_data)
+                    if isinstance(status_fields, dict):
+                        print(
+                            "STATUS ROOT CHECK:",
+                            {
+                                "directory_exists": status_fields.get("directory_exists"),
+                                "directory_matches_fixture": (
+                                    status_fields.get("directory") == str(share)
+                                ),
+                            },
+                        )
 
                 listing = await session.call_tool("list_files", {})
                 if listing.is_error:
@@ -92,8 +105,15 @@ async def main() -> None:
                 listed_names = _extract_string_list(listing)
                 fixture_name = "authoritylab-smoke-test.txt"
                 if fixture_name not in listed_names:
+                    raw_content = [
+                        getattr(block, "text", None)
+                        for block in getattr(listing, "content", [])
+                    ]
                     raise AssertionError(
-                        f"Isolated fixture missing from list_files: {listed_names!r}"
+                        "Isolated fixture missing from list_files: "
+                        f"parsed={listed_names!r}, "
+                        f"structuredContent={getattr(listing, 'structuredContent', None)!r}, "
+                        f"content_text={raw_content!r}"
                     )
 
                 read_result = await session.call_tool("read_file", {"path": fixture_name})
