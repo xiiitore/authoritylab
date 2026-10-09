@@ -68,7 +68,10 @@ def _status_output(value: Any) -> ToolResult:
         return ToolResult(ok=False, error="status tool returned a non-mapping result")
     if value.get("status") != "ready":
         return ToolResult(ok=False, error="status tool reports that the bridge is not ready")
-    if value.get("directory_exists") is not True:
+    directory_exists = value.get("directory_exists")
+    if type(directory_exists) is not bool:
+        return ToolResult(ok=False, error="status tool returned malformed fields")
+    if not directory_exists:
         return ToolResult(ok=False, error="permitted directory is unavailable")
     if (
         not isinstance(value.get("directory"), str)
