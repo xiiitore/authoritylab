@@ -85,6 +85,27 @@ class DurableAuditLogTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 DurableAuditLog(str(link)).append({"task_id": "x"})
 
+    def test_append_rejects_hard_link_without_mutating_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "ordinary.txt"
+            audit_alias = Path(directory) / "audit.jsonl"
+            target.write_text("preserve this file\\n", encoding="utf-8")
+            os.link(target, audit_alias)
+            before = target.read_bytes()
+            with self.assertRaisesRegex(ValueError, "hard-linked audit files"):
+                DurableAuditLog(str(audit_alias)).append({"task_id": "x"})
+            self.assertEqual(target.read_bytes(), before)
+            self.assertEqual(audit_alias.read_bytes(), before)
+
+    def test_verify_rejects_hard_linked_audit_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "ordinary.txt"
+            audit_alias = Path(directory) / "audit.jsonl"
+            target.write_text("not an audit log\\n", encoding="utf-8")
+            os.link(target, audit_alias)
+            with self.assertRaisesRegex(ValueError, "hard-linked audit files"):
+                DurableAuditLog(str(audit_alias)).verify()
+
     def test_constructor_rejects_weak_keys_and_invalid_record_limits(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "audit.jsonl")
