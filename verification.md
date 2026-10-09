@@ -6,7 +6,7 @@ The system separates tool execution from evidence sufficiency. A tool can return
 |---|---|
 | `PASS` | Mandatory execution checks pass and the configured structural evidence schema is satisfied. |
 | `FAIL` | A mandatory execution check fails, or the handler reports failure. |
-| `BLOCKED` | No handler exists or mandatory policy configuration is invalid. |
+| `BLOCKED` | No handler exists, the handler is not explicitly trusted, or mandatory policy configuration is invalid. |
 | `UNKNOWN` | No schema exists for the task kind or required evidence fields are missing/empty. |
 
 ## Mandatory execution checks
@@ -22,6 +22,6 @@ Configure one `EvidenceSchema` per task kind using `task_kind` and a non-empty t
 
 This is a structural check only. It does not verify source authenticity, truth, field semantics, or resistance to fabricated evidence. Domain-specific semantic validators and provenance checks must be supplied by the application before factual verification or acceptance.
 
-## Security boundary
+## Handler trust boundary
 
-Handlers execute in-process and are trusted code. This implementation does not sandbox handlers, isolate credentials, impose hard resource limits/timeouts, or persist a tamper-evident audit log. Do not use it as a production execution boundary for untrusted code.
+Handlers are blocked by default and must be explicitly registered with `trusted=True`. This is a caller-controlled allow-list, not process isolation. Trusted handlers execute in-process and can access the process's resources. This implementation does not sandbox handlers, isolate credentials, impose hard resource limits/timeouts, or persist a tamper-evident audit log. Do not register untrusted code.
