@@ -154,6 +154,7 @@ class DockerSandboxRunner:
         self,
         image: str,
         *,
+        docker_executable: str = "/usr/bin/docker",
         timeout_seconds: float = 10.0,
         memory_limit_bytes: int = 536_870_912,
         cpus: float = 1.0,
@@ -175,6 +176,7 @@ class DockerSandboxRunner:
         if os.name != "posix":
             raise ValueError("DockerSandboxRunner requires POSIX process controls")
         self.image = image
+        self.docker_executable = docker_executable
         self.timeout_seconds = float(timeout_seconds)
         self.memory_limit_bytes = memory_limit_bytes
         self.cpus = float(cpus)
@@ -184,7 +186,7 @@ class DockerSandboxRunner:
         self.max_open_files = max_open_files
 
     def _minimal_environment(self) -> dict[str, str]:
-        return {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+        return {"PATH": "/usr/bin:/bin"}
 
     def _host_output_limit(self) -> None:
         import resource
@@ -193,7 +195,7 @@ class DockerSandboxRunner:
 
     def _stop_container(self, name: str) -> None:
         environment = self._minimal_environment()
-        for args in (["docker", "kill", name], ["docker", "rm", "-f", name]):
+        for args in ([self.docker_executable, "kill", name], [self.docker_executable, "rm", "-f", name]):
             try:
                 subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                timeout=5, check=False, env=environment)
@@ -215,7 +217,7 @@ class DockerSandboxRunner:
 
         name = "authoritylab-" + uuid.uuid4().hex
         command = [
-            "docker", "run", "--rm", "--interactive", "--name", name,
+            self.docker_executable, "run", "--rm", "--interactive", "--name", name,
             "--pull=never", "--network=none", "--read-only",
             "--memory", str(self.memory_limit_bytes), "--cpus", str(self.cpus),
             "--pids-limit", str(self.pids_limit), "--cap-drop=ALL",
