@@ -45,6 +45,18 @@ def _extract_string_list(result: object) -> list[str]:
                 continue
             if isinstance(value, list) and all(isinstance(x, str) for x in value):
                 return value
+
+        # Some MCP SDK/server combinations encode a list result as plain text
+        # content rather than structuredContent or a serialized list.
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        if lines and all(
+            line not in {".", ".."}
+            and "/" not in line
+            and "\\" not in line
+            and "\\x00" not in line
+            for line in lines
+        ):
+            return lines
     return []
 
 
