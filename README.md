@@ -19,7 +19,7 @@ Python 3.11 or newer. Runtime code uses the standard library. The durable audit 
 From the repository root:
 
 ```bash
-python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation
+python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation test_subprocess_runner
 ```
 
 CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
@@ -66,6 +66,8 @@ verifier = ResultVerifier(semantic_validators=validators)
 Supplying a registry enables semantic mode. Every task kind processed in that mode must have a registered validator; missing validators yield `UNKNOWN`, and validators run only after structural completeness passes. Exceptions and invalid return types also produce `UNKNOWN` without exposing exception messages. The example demonstrates a domain rule only; it is not a universal source-authentication mechanism. A validator can establish only what its own implementation and evidence support; independent source authentication and truth verification remain application-specific responsibilities. Workflows that do not inject a registry retain the prior structural-only behavior and must not describe their results as semantically verified.
 
 Handlers are blocked by default. To execute one, the caller must explicitly register it with `trusted=True`. This is a trust allow-list, not a sandbox: the caller must only mark reviewed code it controls as trusted. Untrusted code must not be loaded into this process.
+
+For importable top-level handlers, `WorkflowCore(..., execution_runner=SubprocessHandlerRunner(...))` can add a child-process boundary, a wall-clock timeout, and POSIX CPU, address-space, output-file, and open-file limits. Inputs and outputs must be JSON-serializable. The backend strips most inherited environment variables and kills the child process group on timeout. It is a reliability/resource-control layer, **not a security sandbox**: the child runs as the same operating-system user and may still access files and network resources permitted to that user. Use a properly configured container or OS sandbox for untrusted code.
 
 To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.jsonl")` and pass it as `audit_log=` to `WorkflowCore`. A configured audit write failure changes the workflow status to `BLOCKED`. The log detects record edits/reordering through a hash chain; it is not signed, and a privileged actor able to rewrite the entire file can rebuild that chain.
 
