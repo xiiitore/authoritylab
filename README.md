@@ -81,4 +81,4 @@ To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.js
 - Structural schemas do not establish factual truth, source provenance, or resistance to fabricated evidence. Semantic validators are explicit application-supplied checks, not a general truth oracle.
 - The project is not a security certification or production-readiness claim.
 
-For new gates, add positive, negative, missing-evidence, and boundary tests. Keep network, filesystem, and external-service actions behind explicit adapters.
+For new gates, add positive, negative, missing-evidence, and boundary tests. Keep network, filesystem, and external-service actions behind explicit adapters. Before production deployment, complete the [security and recovery runbook](docs/production-security-runbook.md); CI success alone is not a production security certification.

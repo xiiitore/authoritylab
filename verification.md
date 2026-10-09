@@ -41,3 +41,8 @@ The default runner executes in-process. `SubprocessHandlerRunner` can enforce a 
 ## Durable audit
 
 The optional local JSONL audit store assigns each event a stable ID and links records with a SHA-256 hash chain. Writes are serialized with POSIX file locking and flushed to disk. Validation streams records and enforces a configurable per-record size bound; symlink paths are rejected where `O_NOFOLLOW` is supported. Hash-chain mode detects edits and reordering but cannot prevent a privileged actor from rewriting the entire file. Optional HMAC-SHA256 signatures detect rewrites by actors who do not possess the key. Supply a secret key of at least 32 bytes from a secret manager or OS-protected configuration; never store it beside the log or in source control. Signed logs require the same key for verification and appending, and signed/unsigned records cannot be mixed. HMAC does not prevent deletion, denial of service, key compromise, or tampering by an actor who controls both key and log. Use OS permissions, independent backups, and external immutable storage for stronger assurance.
+
+
+## Production release gate
+
+Passing repository tests and CI does not establish production readiness. Before accepting untrusted handlers, complete the deployment-specific threat model, adversarial isolation tests, daemon-failure/cleanup tests, HMAC key custody and rotation, independent immutable audit anchoring, and restoration drill described in [the production security runbook](docs/production-security-runbook.md). Each applicable gate must have recorded evidence and independent review. Until then the release status is `BLOCKED`, not `PASS`.
