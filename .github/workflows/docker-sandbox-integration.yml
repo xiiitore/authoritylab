@@ -45,13 +45,11 @@ jobs:
 
           # Public registries can rate-limit hosted runners. Retry transient
           # failures, then fall back to Docker Hub's canonical library image.
-          if ! pull_with_retry public.ecr.aws/docker/library/registry:2; then
+          if pull_with_retry public.ecr.aws/docker/library/registry:2; then
+            REGISTRY_IMAGE="public.ecr.aws/docker/library/registry:2"
+          else
             echo "Amazon ECR mirror unavailable; trying Docker Hub fallback." >&2
             pull_with_retry docker.io/library/registry:2
-          fi
-
-          REGISTRY_IMAGE="public.ecr.aws/docker/library/registry:2"
-          if ! docker image inspect "${REGISTRY_IMAGE}" >/dev/null 2>&1; then
             REGISTRY_IMAGE="docker.io/library/registry:2"
           fi
           docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 "${REGISTRY_IMAGE}"
