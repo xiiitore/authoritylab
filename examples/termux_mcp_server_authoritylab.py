@@ -48,9 +48,10 @@ server = MCPServer(
 
 
 def _status_impl() -> dict[str, Any]:
+    directory_exists = is_confined_directory(ROOT)
     return {
-        "status": "ready",
-        "directory_exists": is_confined_directory(ROOT),
+        "status": "ready" if directory_exists else "unavailable",
+        "directory_exists": directory_exists,
         "directory": str(ROOT),
         "max_file_bytes": MAX_FILE_BYTES,
     }
@@ -58,7 +59,7 @@ def _status_impl() -> dict[str, Any]:
 
 def _list_files_impl() -> list[str]:
     if not is_confined_directory(ROOT):
-        return []
+        raise ToolError("permitted directory is unavailable")
     return list_confined_files(ROOT, max_entries=100)
 
 
