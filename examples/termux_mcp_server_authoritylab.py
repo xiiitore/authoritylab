@@ -10,13 +10,14 @@ import asyncio
 import inspect
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from authoritylab import GovernancePolicy, WorkflowCore, WorkflowReport
+from authoritylab import GovernancePolicy, WorkflowCore
 from authoritylab.secure_paths import (
     is_confined_directory,
     list_confined_files,
@@ -83,20 +84,9 @@ workflow = WorkflowCore(
 )
 
 
-def _audit_report(report: WorkflowReport) -> None:
+def _audit_report(event: Mapping[str, Any]) -> None:
     """Write metadata-only audit records to stderr, never file contents."""
-    record = {
-        "audit": dict(report.audit),
-        "status": report.status.value,
-        "checks": [
-            {"name": check.name, "status": check.status.value}
-            for check in report.checks
-        ],
-        "tool_succeeded": (
-            report.tool_result.ok if report.tool_result is not None else None
-        ),
-    }
-    print(json.dumps(record, sort_keys=True), file=sys.stderr, flush=True)
+    print(json.dumps(dict(event), sort_keys=True), file=sys.stderr, flush=True)
 
 
 def _dispatch(kind: str, payload: dict[str, Any]) -> Any:
