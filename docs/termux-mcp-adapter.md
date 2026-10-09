@@ -11,7 +11,8 @@ A complete reference server is provided at
 [`examples/termux_mcp_server_authoritylab.py`](../examples/termux_mcp_server_authoritylab.py).
 It preserves the `~/mcp-share` directory boundary, the 200 KB file limit, UTF-8
 reading, and the three read-only MCP endpoints while routing calls through
-AuthorityLab.
+AuthorityLab. File reads use descriptor-relative opens with `O_NOFOLLOW` for
+path components and fail closed if the platform lacks the required features.
 
 The example is deliberately a separate file. It does **not** replace or edit
 `~/termux_mcp_server.py` automatically. Compare it against the local server
@@ -32,6 +33,9 @@ should be only the three wrappers that call `dispatch_read_only_mcp_tool`.
 - `PASS` means the configured AuthorityLab result checks passed. It is not a
   security certification and does not replace filesystem-level validation.
 - Audit records remain in memory unless the host application persists them.
+- The confined reader mitigates symlink replacement races by opening path
+  components relative to held directory descriptors; it does not provide a
+  durable audit log or protect against every same-user filesystem threat.
 
 ## Tests
 
