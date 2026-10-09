@@ -26,6 +26,16 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
     return descriptor
 
 
+def is_confined_directory(root: str | os.PathLike[str]) -> bool:
+    """Return whether root can be opened as a real directory, not a symlink."""
+    try:
+        descriptor = _open_confined_root(root)
+    except (OSError, ValueError):
+        return False
+    os.close(descriptor)
+    return True
+
+
 def list_confined_files(
     root: str | os.PathLike[str],
     *,
@@ -34,6 +44,8 @@ def list_confined_files(
     """List regular, single-link files directly in root, without following links."""
     if type(max_entries) is not int or max_entries < 0:
         raise ValueError("max_entries must be a non-negative integer")
+    if max_entries == 0:
+        return []
     if os.stat not in os.supports_dir_fd or os.stat not in os.supports_follow_symlinks:
         raise OSError("Platform lacks required safe relative-stat features")
 
