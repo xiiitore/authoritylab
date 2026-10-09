@@ -69,6 +69,15 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read("linked-dir/outside.txt")
 
+    def test_rejects_hard_link_to_file_outside_root(self) -> None:
+        link = self.root / "linked-outside.txt"
+        try:
+            os.link(self.outside, link)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"Hard-link creation is unavailable: {exc}")
+        with self.assertRaisesRegex(ValueError, "Hard-linked"):
+            self.read("linked-outside.txt")
+
     def test_enforces_size_limit(self) -> None:
         (self.root / "large.bin").write_bytes(b"12345")
         with self.assertRaisesRegex(ValueError, "limit"):
