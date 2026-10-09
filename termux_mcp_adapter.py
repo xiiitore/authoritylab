@@ -6,12 +6,20 @@ server, widen filesystem access, or provide shell/file mutation operations.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import PurePosixPath
 from typing import Any
+from uuid import uuid4
 
-from .models import Task, ToolResult
+from .models import Task, ToolResult, WorkflowStatus
 from .tools import ToolRegistry
+
+
+ALLOWED_TOOL_NAMES = frozenset({"status", "list_files", "read_file"})
+
+
+class MCPAdapterError(RuntimeError):
+    """Raised when a read-only MCP workflow is rejected or does not pass."""
 
 
 StatusTool = Callable[[], Any]
@@ -88,3 +96,35 @@ def register_read_only_mcp_tools(
     registry.register("status", status_handler)
     registry.register("list_files", list_files_handler)
     registry.register("read_file", read_file_handler)
+
+
+def dispatch_read_only_mcp_tool(
+    core: Any,
+    *,
+    kind: str,
+    payload: Mapping[str, Any] | None = None,
+) -> Any:
+    """Run one allowlisted MCP operation through WorkflowCore and return output.
+
+    Call this from each exposed MCP tool wrapper. The allowlist is checked before
+    WorkflowCore is invoked, and any non-PASS report becomes an MCPAdapterError.
+    This function does not itself register or expose MCP endpoints.
+    """
+
+    if kind not in ALLOWED_TOOL_NAMES:
+        raise MCPAdapterError(f"MCP operation is not allowlisted: {kind!r}")
+    if payload is None:
+        safe_payload: dict[str, Any] = {}
+    elif isinstance(payload, Mapping):
+        safe_payload = dict(payload)
+    else:
+        raise MCPAdapterError("MCP payload must be a mapping")
+
+    report = core.run(
+        Task(task_id=f"mcp-{uuid4().hex}", kind=kind, payload=safe_payload)
+    )
+    if report.status != WorkflowStatus.PASS or report.tool_result is None:
+        detail = report.tool_result.error if report.tool_result is not None else None
+        suffix = f": {detail}" if detail else ""
+        raise MCPAdapterError(f"MCP operation {kind!r} did not pass ({report.status.value}){suffix}")
+    return report.tool_result.output
