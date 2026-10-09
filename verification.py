@@ -1,4 +1,4 @@
-"""Evaluate execution results and task-specific evidence structure."""
+"""Evaluate execution results, structural evidence, and configured semantics."""
 
 from __future__ import annotations
 
@@ -6,9 +6,19 @@ from collections.abc import Mapping
 
 from .governance import MANDATORY_CHECKS, GovernancePolicy
 from .models import CheckResult, CheckStatus, ToolResult, WorkflowStatus
+from .semantic_validation import SemanticValidatorRegistry
 
 
 class ResultVerifier:
+    def __init__(
+        self, semantic_validators: SemanticValidatorRegistry | None = None
+    ) -> None:
+        if semantic_validators is not None and not isinstance(
+            semantic_validators, SemanticValidatorRegistry
+        ):
+            raise TypeError("semantic_validators must be a SemanticValidatorRegistry or None")
+        self.semantic_validators = semantic_validators
+
     def verify(
         self,
         result: ToolResult,
@@ -30,7 +40,6 @@ class ResultVerifier:
                 "no required checks are configured",
             ))
 
-        # Always evaluate both baseline checks independently of policy validation.
         for name in MANDATORY_CHECKS:
             if name == "result_present":
                 present = result.output is not None
@@ -46,10 +55,9 @@ class ResultVerifier:
                     "tool reported success" if result.ok else (result.error or "tool reported failure"),
                 ))
 
-        # Operational success is not semantic verification. A task-specific schema
-        # is required before the output can be considered structurally sufficient.
         schema_for = getattr(policy, "schema_for", None)
         schema = schema_for(task_kind) if callable(schema_for) else None
+        structurally_valid = False
         if schema is None:
             checks.append(CheckResult(
                 "task_evidence_valid",
@@ -74,10 +82,30 @@ class ResultVerifier:
                     "required evidence fields are missing or empty",
                 ))
             else:
+                structurally_valid = True
                 checks.append(CheckResult(
                     "task_evidence_valid",
                     CheckStatus.PASS,
-                    "required evidence fields are present",
+                    "required evidence fields are present; factual truth is not established",
+                ))
+
+        # Semantic checks are opt-in and domain-defined. A validator is only run
+        # after structural completeness passes; exceptions/bad returns become UNKNOWN.
+        validator = (
+            self.semantic_validators.resolve(task_kind)
+            if self.semantic_validators is not None else None
+        )
+        if validator is not None:
+            if structurally_valid and isinstance(result.output, Mapping) and isinstance(task_kind, str):
+                semantic = self.semantic_validators.validate(task_kind, result.output)
+                checks.append(CheckResult(
+                    "semantic_evidence_valid", semantic.status, semantic.detail
+                ))
+            else:
+                checks.append(CheckResult(
+                    "semantic_evidence_valid",
+                    CheckStatus.UNKNOWN,
+                    "semantic validation skipped because structural evidence is incomplete",
                 ))
 
         if any(check.status == CheckStatus.BLOCKED for check in checks):
