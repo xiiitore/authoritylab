@@ -1,77 +1,48 @@
 # AuthorityLab
 
-AuthorityLab is a small, executable reference implementation for evidence-aware workflow orchestration. It is a foundation to extend—not a claim that an autonomous or production-grade governance system already exists.
+AuthorityLab is a small reference implementation for evidence-aware workflow orchestration. It is a foundation to extend, not a production-grade governance or autonomous security system.
 
-## What it does
+## Responsibilities
 
-- **Workflow Core** classifies a task and routes it to an explicitly registered handler.
-- **Workflow Tools** are registered handlers with declared names and predictable inputs/outputs.
-- **OVERALGORITHM** is represented by governance rules that define required evidence and acceptance gates.
-- **Verification** evaluates a result against required checks and keeps execution status separate from acceptance status.
-- **Audit records** capture task, route, result, checks, and final status in structured data.
+- **Workflow Core** routes tasks only to explicitly registered handlers.
+- **Workflow Tools** are handlers with predictable inputs and outputs.
+- **Governance Policy** defines which checks must run.
+- **Verification** keeps execution outcomes separate from acceptance decisions.
+- **Audit records** record the route, check outcomes, status, and non-sensitive result metadata.
 
-The names describe module responsibilities in this repository. They do not imply a connection to external plugins or a privileged system layer.
+These module names describe this repository only. They do not imply access to external plugins or privileged system layers.
 
-## Requirements
+## Requirements and tests
 
-- Python 3.11 or newer
-- Runtime uses only the Python standard library
-
-## Run
+Python 3.11 or newer. Runtime code uses the standard library.
 
 From the repository root:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest -v test_workflow
 ```
 
-Example:
+CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
 
-```python
-from authoritylab import WorkflowCore, Task, ToolResult
-from authoritylab.tools import ToolRegistry
-from authoritylab.governance import GovernancePolicy
-from authoritylab.verification import ResultVerifier, Check
+## Example
 
-registry = ToolRegistry()
-registry.register("echo", lambda task: ToolResult(ok=True, output={"echo": task.payload}))
-core = WorkflowCore(registry, GovernancePolicy(required_checks=("result_present",)))
-report = core.run(Task(task_id="demo-1", kind="echo", payload={"message": "hello"}))
-print(report.status.value)
-```
-
-For a runnable example, see `examples/basic_workflow.py` in the repository.
+See `basic_workflow.py` in the repository root. Architecture and status definitions are documented in `architecture.md` and `verification.md`.
 
 ## Status semantics
 
-- `PASS`: all required checks were executed and passed.
-- `FAIL`: a required check ran and failed, or the routed tool failed.
-- `BLOCKED`: a required check was not executed or the route/tool was unavailable.
-- `UNKNOWN`: evidence is insufficient to decide.
+- `PASS`: all configured checks ran and passed.
+- `FAIL`: a required check ran and failed, or the handler reported failure.
+- `BLOCKED`: a required check was not executable or the route was unavailable.
+- `UNKNOWN`: reserved for a future explicit insufficient-evidence check; current built-in checks do not emit it.
 
-A successful tool call alone is not acceptance. Acceptance is determined separately by the required checks. Never treat missing evidence as a pass.
-
-## Architecture
-
-```text
-Task -> WorkflowCore -> ToolRegistry -> ToolResult
-                   \-> GovernancePolicy -> ResultVerifier -> WorkflowReport
-```
-
-See `docs/architecture.md` and `docs/verification.md` for design details and limitations.
-
-## Development
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Keep core logic deterministic and side-effect-light. Put network, filesystem, and external-service actions behind explicit tool adapters. Add positive, negative, missing-evidence, and boundary tests for new gates.
+A successful tool call alone is not acceptance. The current checks only verify output presence and the handler's success flag; they do not establish factual correctness.
 
 ## Current limitations
 
-- No external plugin integrations are implemented.
-- No persistent database, authentication, web API, or distributed execution is included.
-- Registered handlers run in-process and are not sandboxed.
-- Audit records are returned in memory; durable storage must be added explicitly.
-- This is a starting implementation, not a security certification or production-readiness claim.
+- No external plugin integrations, authentication, web API, sandbox, or distributed execution.
+- Registered handlers run in-process and can access the process's resources.
+- Audit records are returned in memory and are not durable or tamper-evident.
+- Exceptions are represented as failure evidence; this is not a sandbox.
+- The project is not a security certification or production-readiness claim.
+
+For new gates, add positive, negative, missing-evidence, and boundary tests. Keep network, filesystem, and external-service actions behind explicit adapters.
