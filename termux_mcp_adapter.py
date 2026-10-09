@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from .core import WorkflowCore
-from .models import Task, ToolResult, WorkflowStatus
+from .models import Task, ToolResult, WorkflowReport, WorkflowStatus
 from .tools import ToolRegistry
 
 
@@ -26,6 +26,7 @@ class MCPAdapterError(RuntimeError):
 StatusTool = Callable[[], Any]
 ListFilesTool = Callable[[], Any]
 ReadFileTool = Callable[[str], Any]
+AuditSink = Callable[[WorkflowReport], None]
 
 
 def _empty_payload(task: Task) -> ToolResult | None:
@@ -151,6 +152,7 @@ def dispatch_read_only_mcp_tool(
     *,
     kind: str,
     payload: Mapping[str, Any] | None = None,
+    audit_sink: AuditSink | None = None,
 ) -> Any:
     """Run one allowlisted MCP operation through WorkflowCore and return output.
 
@@ -161,6 +163,8 @@ def dispatch_read_only_mcp_tool(
 
     if not isinstance(kind, str) or kind not in ALLOWED_TOOL_NAMES:
         raise MCPAdapterError(f"MCP operation is not allowlisted: {kind!r}")
+    if audit_sink is not None and not callable(audit_sink):
+        raise MCPAdapterError("audit_sink must be callable")
     if payload is None:
         safe_payload: dict[str, Any] = {}
     elif isinstance(payload, Mapping):
@@ -171,6 +175,11 @@ def dispatch_read_only_mcp_tool(
     report = core.run(
         Task(task_id=f"mcp-{uuid4().hex}", kind=kind, payload=safe_payload)
     )
+    if audit_sink is not None:
+        try:
+            audit_sink(report)
+        except Exception:
+            raise MCPAdapterError("MCP audit sink failed; result withheld") from None
     if report.status != WorkflowStatus.PASS or report.tool_result is None:
         detail = report.tool_result.error if report.tool_result is not None else None
         suffix = f": {detail}" if detail else ""
