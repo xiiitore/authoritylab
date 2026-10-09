@@ -9,6 +9,7 @@
 - `ResultVerifier`: computes a final status from execution, structural, and any configured semantic check results.
 - `InProcessRunner`: compatibility backend that invokes a handler in the current process.
 - `SubprocessHandlerRunner`: optional child-process backend with JSON IPC, a wall-clock timeout, and POSIX resource limits.
+- `DockerSandboxRunner`: optional digest-pinned Docker backend with disabled networking, no host mounts, a read-only root filesystem, dropped capabilities, a non-root identity, and container resource limits.
 - `WorkflowReport`: returns route, tool result, check results, and a compact audit record.
 
 ## Execution path
@@ -29,4 +30,4 @@ Semantic validation is opt-in for compatibility. Without a registry, the workflo
 
 ## Boundaries
 
-The default runner is in-process. The optional subprocess runner adds a process boundary and resource limits but is not a security sandbox: it uses the same OS identity and does not isolate filesystem or network access. It accepts only importable top-level handlers and JSON-serializable task data/results. The project still does not provide a container/OS sandbox, plugin discovery, authentication, or distributed scheduling. Such features require their own threat model and tests.
+The default runner is in-process. The optional subprocess runner adds process separation and resource limits but is not a security sandbox: it uses the same OS identity and does not isolate filesystem or network access. The optional Docker runner provides a stronger container boundary only when the target Docker daemon, host, and digest-pinned image are trusted and correctly configured. It accepts only importable top-level handlers and JSON-serializable task data/results; the handler module must be present in the image. Unit tests mock Docker CLI execution, so a real deployment still needs target-environment and adversarial integration tests. The project does not implement plugin discovery, authentication, or distributed scheduling.
