@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from authoritylab.secure_paths import (
     is_confined_directory,
@@ -44,9 +47,36 @@ class ConfinedReadTests(unittest.TestCase):
     def read_root(self, root: Path, path: str) -> str:
         return read_confined_text_file(root, path, max_bytes=200_000)
 
-    def test_lists_only_direct_regular_single_link_files(self) -> None:
-        (self.root / "nested-link.txt").symlink_to(self.outside)
-        os.link(self.outside, self.root / "hard-link.txt")
+    def test_lists_only_direct_regular_files_and_excludes_symlinks(self) -> None:
+        link = self.root / "nested-link.txt"
+        try:
+            link.symlink_to(self.outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlink creation is unavailable")
+        self.assertEqual(list_confined_files(self.root), ["note.txt"])
+
+    def test_listing_excludes_entries_reported_as_hard_linked(self) -> None:
+        real_stat = os.stat
+
+        def stat_with_multiple_links(path, *args, **kwargs):
+            metadata = real_stat(path, *args, **kwargs)
+            if path == "note.txt" and kwargs.get("dir_fd") is not None:
+                return SimpleNamespace(st_mode=metadata.st_mode, st_nlink=2)
+            return metadata
+
+        with patch(
+            "authoritylab.secure_paths.os.stat",
+            side_effect=stat_with_multiple_links,
+        ):
+            self.assertEqual(list_confined_files(self.root), [])
+
+    def test_listing_excludes_real_hard_link_when_supported(self) -> None:
+        if not callable(getattr(os, "link", None)):
+            self.skipTest("This Python build does not expose os.link")
+        try:
+            os.link(self.outside, self.root / "hard-link.txt")
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"Hard-link creation is unavailable: {exc}")
         self.assertEqual(list_confined_files(self.root), ["note.txt"])
 
     def test_listing_limit_zero_returns_empty(self) -> None:
@@ -103,10 +133,33 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read("linked-dir/outside.txt")
 
-    def test_rejects_hard_link_to_file_outside_root(self) -> None:
+    def test_rejects_file_reported_as_hard_linked(self) -> None:
+        real_fstat = os.fstat
+
+        def fstat_with_multiple_links(fd):
+            metadata = real_fstat(fd)
+            if stat.S_ISREG(metadata.st_mode):
+                return SimpleNamespace(
+                    st_mode=metadata.st_mode,
+                    st_nlink=2,
+                    st_size=metadata.st_size,
+                )
+            return metadata
+
+        with patch(
+            "authoritylab.secure_paths.os.fstat",
+            side_effect=fstat_with_multiple_links,
+        ):
+            with self.assertRaisesRegex(ValueError, "Hard-linked"):
+                self.read("note.txt")
+
+    def test_rejects_real_hard_link_to_file_outside_root_when_supported(self) -> None:
+        link_function = getattr(os, "link", None)
+        if not callable(link_function):
+            self.skipTest("This Python build does not expose os.link")
         link = self.root / "linked-outside.txt"
         try:
-            os.link(self.outside, link)
+            link_function(self.outside, link)
         except (OSError, NotImplementedError) as exc:
             self.skipTest(f"Hard-link creation is unavailable: {exc}")
         with self.assertRaisesRegex(ValueError, "Hard-linked"):
