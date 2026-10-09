@@ -1,4 +1,4 @@
-"""Workflow Core: route tasks, execute one handler, and verify evidence."""
+"""Workflow Core: route tasks, execute one trusted handler, and verify evidence."""
 
 from __future__ import annotations
 
@@ -25,7 +25,11 @@ class WorkflowCore:
     def run(self, task: Task) -> WorkflowReport:
         handler = self.registry.resolve(task.kind)
         if handler is None:
-            outcome = "no handler registered for task kind"
+            outcome = (
+                "handler is registered but not allow-listed as trusted"
+                if self.registry.is_registered(task.kind)
+                else "no handler registered for task kind"
+            )
             return WorkflowReport(
                 task_id=task.task_id,
                 route=None,
