@@ -119,11 +119,17 @@ async def _resolve(value: Any) -> Any:
 
 async def _check_server() -> None:
     tools = await _resolve(server.list_tools())
+    names = [tool.name for tool in tools]
     print("Registered tools:")
-    for tool in tools:
-        print("-", tool.name)
+    for name in names:
+        print("-", name)
+    expected = {"status", "list_files", "read_file"}
+    if len(names) != len(expected) or set(names) != expected:
+        raise RuntimeError(f"Unexpected MCP tool surface: {names!r}")
 
     result = await _resolve(server.call_tool("status", {}))
+    if result is None:
+        raise RuntimeError("Status tool returned no result")
     print("Status test:", result)
 
 
