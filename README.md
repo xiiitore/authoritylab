@@ -1,13 +1,13 @@
 # AuthorityLab
 
-AuthorityLab is a small reference implementation for evidence-aware workflow orchestration. It is a foundation to extend, not a production-grade governance or autonomous security system.
+AuthorityLab is a reference implementation for evidence-aware workflow orchestration. It is a foundation to extend, not a production-grade governance or autonomous security system.
 
 ## Responsibilities
 
 - **Workflow Core** routes tasks only to explicitly registered handlers.
 - **Workflow Tools** are handlers with predictable inputs and outputs.
-- **Governance Policy** defines required checks while preserving mandatory acceptance invariants.
-- **Verification** keeps execution outcomes separate from acceptance decisions.
+- **Governance Policy** preserves mandatory execution checks and configures task-specific structural evidence schemas.
+- **Verification** keeps execution outcomes separate from evidence sufficiency.
 - **Audit records** record the route, check outcomes, status, and non-sensitive result metadata.
 
 These module names describe this repository only. They do not imply access to external plugins or privileged system layers.
@@ -30,19 +30,21 @@ See `basic_workflow.py` in the repository root. Architecture and status definiti
 
 ## Status semantics
 
-- `PASS`: both mandatory baseline checks ran and passed: output is present and the handler reported success.
-- `FAIL`: a mandatory check ran and failed, or the handler reported failure.
-- `BLOCKED`: mandatory policy configuration is missing/malformed, a required check was not executable, or the route was unavailable.
-- `UNKNOWN`: reserved for a future explicit insufficient-evidence check; current built-in checks do not emit it.
+- `PASS`: both mandatory execution checks passed and a configured task-specific structural evidence schema is satisfied.
+- `FAIL`: a mandatory execution check failed or the handler reported failure.
+- `BLOCKED`: mandatory policy configuration is missing/malformed or the route was unavailable.
+- `UNKNOWN`: no schema is configured for the task kind, or the output does not provide the required fields. The workflow cannot infer truth from missing or structurally insufficient evidence.
 
-The mandatory baseline checks cannot be disabled by configuration. The verifier repeats this invariant so bypassing policy-object validation cannot produce a PASS with a missing output. A successful tool call alone is not acceptance: these checks do not establish factual correctness.
+Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values. Domain-specific semantic validators are still required before treating an output as factually verified or accepted.
+
+The mandatory baseline checks cannot be disabled by configuration. The verifier repeats this invariant so bypassing policy-object validation cannot produce a PASS with missing output. A successful tool call alone is not acceptance.
 
 ## Current limitations
 
 - No external plugin integrations, authentication, web API, sandbox, or distributed execution.
-- Registered handlers run in-process and can access the process's resources.
+- Registered handlers run in-process and can access the process's resources. **Do not register untrusted handlers.** Exception handling is not a sandbox; this repository does not yet provide OS/container isolation, hard resource limits, or reliable handler timeouts.
 - Audit records are returned in memory and are not durable or tamper-evident.
-- Exceptions are represented as failure evidence; this is not a sandbox.
+- Structural schemas do not establish factual truth, source provenance, or resistance to fabricated evidence.
 - The project is not a security certification or production-readiness claim.
 
 For new gates, add positive, negative, missing-evidence, and boundary tests. Keep network, filesystem, and external-service actions behind explicit adapters.
