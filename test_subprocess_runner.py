@@ -200,7 +200,10 @@ class DockerSandboxRunnerTests(unittest.TestCase):
             def wait(self):
                 return self.returncode
 
-        with (\n            patch("authoritylab.execution.subprocess.Popen", side_effect=lambda command, **kwargs: FailedProcess(kwargs)),\n            patch("authoritylab.execution.subprocess.run") as cleanup,\n        ):
+        with (
+            patch("authoritylab.execution.subprocess.Popen", side_effect=lambda command, **kwargs: FailedProcess(kwargs)),
+            patch("authoritylab.execution.subprocess.run") as cleanup,
+        ):
             with self.assertRaisesRegex(ExecutionBlockedError, "Docker sandbox container failed"):
                 DockerSandboxRunner(self.IMAGE).run(echo_handler, Task("docker-daemon-down", "echo"))
         self.assertEqual(cleanup.call_count, 2)
