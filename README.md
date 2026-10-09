@@ -30,10 +30,10 @@ See `basic_workflow.py` in the repository root. Architecture and status definiti
 
 ## Status semantics
 
-- `PASS`: both mandatory execution checks passed and a configured task-specific structural evidence schema is satisfied; if a semantic validator is registered for that task kind, it must also return `PASS`.
+- `PASS`: both mandatory execution checks passed and a configured task-specific structural evidence schema is satisfied; when semantic mode is enabled, a registered validator must also return `PASS`.
 - `FAIL`: a mandatory execution check or configured semantic check failed.
 - `BLOCKED`: no handler exists, a handler is registered but not allow-listed as trusted, mandatory policy configuration is invalid, or configured durable audit storage fails.
-- `UNKNOWN`: no structural schema is configured, required evidence fields are missing, or a configured semantic validator fails to produce a valid decision.
+- `UNKNOWN`: no structural schema is configured, required evidence fields are missing, or semantic mode is enabled but a task validator is missing or cannot produce a valid decision.
 
 Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values.
 
@@ -63,7 +63,7 @@ validators.register(
 verifier = ResultVerifier(semantic_validators=validators)
 ```
 
-The example demonstrates a domain rule only; it is not a universal source-authentication mechanism. Validators run only after the task's structural schema is satisfied. Exceptions and invalid return types produce `UNKNOWN` without exposing exception messages. Semantic checks are opt-in to preserve existing workflows, so a task without a registered validator is **not** semantically verified merely because structural checks pass. A validator can establish only what its own implementation and evidence support; independent source authentication and truth verification remain application-specific responsibilities.
+Supplying a registry enables semantic mode. Every task kind processed in that mode must have a registered validator; missing validators yield `UNKNOWN`, and validators run only after structural completeness passes. Exceptions and invalid return types also produce `UNKNOWN` without exposing exception messages. The example demonstrates a domain rule only; it is not a universal source-authentication mechanism. A validator can establish only what its own implementation and evidence support; independent source authentication and truth verification remain application-specific responsibilities. Workflows that do not inject a registry retain the prior structural-only behavior and must not describe their results as semantically verified.
 
 Handlers are blocked by default. To execute one, the caller must explicitly register it with `trusted=True`. This is a trust allow-list, not a sandbox: the caller must only mark reviewed code it controls as trusted. Untrusted code must not be loaded into this process.
 
