@@ -52,10 +52,21 @@ def _status_output(value: Any) -> ToolResult:
 
 
 def _list_files_output(value: Any) -> ToolResult:
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+    if (
+        not isinstance(value, list)
+        or len(value) > 100
+        or any(
+            not isinstance(item, str)
+            or not item
+            or item in {".", ".."}
+            or "/" in item
+            or "\\x00" in item
+            for item in value
+        )
+    ):
         return ToolResult(
             ok=False,
-            error="list_files tool must return a list of strings",
+            error="list_files tool must return at most 100 direct file names",
         )
     return ToolResult(ok=True, output=value)
 
