@@ -107,5 +107,41 @@ class DurableAuditLogTests(unittest.TestCase):
                 log.append("not-a-mapping")
 
 
+    def test_concurrent_appends_preserve_a_single_valid_chain(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "concurrent.jsonl")
+            log = DurableAuditLog(path, integrity_key=self.KEY)
+            count = 32
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results = list(pool.map(
+                    lambda index: log.append({"task_id": f"task-{index}", "status": "PASS"}),
+                    range(count),
+                ))
+            self.assertEqual(len({result["event_id"] for result in results}), count)
+            self.assertTrue(log.verify())
+            records = [json.loads(line) for line in Path(path).read_text().splitlines()]
+            self.assertEqual(len(records), count)
+            self.assertEqual(len({record["event"]["task_id"] for record in records}), count)
+            self.assertEqual(records[0]["previous_hash"], "0" * 64)
+            for previous, current in zip(records, records[1:]):
+                self.assertEqual(current["previous_hash"], previous["hash"])
+
+    def test_truncated_final_record_is_rejected_and_not_silently_repaired(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "truncated.jsonl"
+            log = DurableAuditLog(str(path))
+            log.append({"task_id": "task-1", "status": "PASS"})
+            with path.open("ab") as stream:
+                stream.write(b'{"event_id":"partial"')
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "audit chain invalid"):
+                log.verify()
+            with self.assertRaisesRegex(ValueError, "audit chain invalid"):
+                log.append({"task_id": "task-2", "status": "PASS"})
+            self.assertEqual(path.read_bytes(), before)
+
+
 if __name__ == "__main__":
     unittest.main()
