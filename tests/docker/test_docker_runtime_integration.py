@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import os
 import socket
+import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from authoritylab import Task, ToolResult
 from authoritylab.execution import DockerSandboxRunner, ExecutionBlockedError
@@ -36,6 +38,8 @@ def inspect_container_handler(task):
             "non_root": non_root,
             "root_filesystem_read_only": write_blocked,
             "network_disabled": network_blocked,
+            "host_secret_not_inherited": "AUTHORITYLAB_HOST_SECRET" not in os.environ,
+            "host_file_not_mounted": not os.path.exists(task.payload.get("host_path", "/definitely-not-present")),
         },
     )
 
@@ -64,8 +68,15 @@ class DockerRuntimeIntegrationTests(unittest.TestCase):
         self.assertTrue(result.ok, result.error)
         self.assertEqual(result.output, {"task_id": "integration-1", "kind": "echo"})
 
-    def test_real_container_enforces_non_root_read_only_and_no_network(self):
-        result = self.runner.run(inspect_container_handler, Task("integration-2", "inspect"))
+    def test_real_container_enforces_non_root_read_only_no_network_and_no_host_access(self):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as host_file:
+            host_file.write("host-only-secret")
+            host_file.flush()
+            with patch.dict(os.environ, {"AUTHORITYLAB_HOST_SECRET": "must-not-cross-boundary"}):
+                result = self.runner.run(
+                    inspect_container_handler,
+                    Task("integration-2", "inspect", {"host_path": host_file.name}),
+                )
         self.assertTrue(result.ok, result.error)
         self.assertEqual(
             result.output,
@@ -73,6 +84,8 @@ class DockerRuntimeIntegrationTests(unittest.TestCase):
                 "non_root": True,
                 "root_filesystem_read_only": True,
                 "network_disabled": True,
+                "host_secret_not_inherited": True,
+                "host_file_not_mounted": True,
             },
         )
 
