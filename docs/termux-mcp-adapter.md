@@ -7,53 +7,19 @@ access; the supplied functions must retain their own path and file-size checks.
 
 ## Integration pattern
 
-In the Termux server, keep the current implementations as internal functions
-(e.g. `_status_impl`, `_list_files_impl`, and `_read_file_impl`) and register
-those implementations with the workflow registry. Expose MCP-decorated wrapper
-functions that dispatch through AuthorityLab:
+A complete reference server is provided at
+[`examples/termux_mcp_server_authoritylab.py`](../examples/termux_mcp_server_authoritylab.py).
+It preserves the `~/mcp-share` directory boundary, the 200 KB file limit, UTF-8
+reading, and the three read-only MCP endpoints while routing calls through
+AuthorityLab.
 
-```python
-from authoritylab import GovernancePolicy, WorkflowCore
-from authoritylab.tools import ToolRegistry
-from authoritylab.termux_mcp_adapter import (
-    MCPAdapterError,
-    dispatch_read_only_mcp_tool,
-    register_read_only_mcp_tools,
-)
+The example is deliberately a separate file. It does **not** replace or edit
+`~/termux_mcp_server.py` automatically. Compare it against the local server
+before adopting it, and keep the original as a rollback copy.
 
-registry = ToolRegistry()
-register_read_only_mcp_tools(
-    registry,
-    status=_status_impl,
-    list_files=_list_files_impl,
-    read_file=_read_file_impl,
-)
-workflow = WorkflowCore(registry, GovernancePolicy())
-
-def _dispatch(kind, payload):
-    try:
-        return dispatch_read_only_mcp_tool(
-            workflow, kind=kind, payload=payload
-        )
-    except MCPAdapterError as exc:
-        raise ToolError(str(exc)) from None
-
-@server.tool()
-def status() -> dict:
-    return _dispatch("status", {})
-
-@server.tool()
-def list_files() -> list[str]:
-    return _dispatch("list_files", {})
-
-@server.tool()
-def read_file(path: str) -> str:
-    return _dispatch("read_file", {"path": path})
-```
-
-Do not leave the original implementations decorated as exposed MCP tools;
-otherwise clients can bypass the workflow wrappers. Keep their existing
-filesystem confinement, symlink checks, UTF-8 handling, and 200 KB limit.
+Do not expose the internal implementations as separate decorated MCP tools;
+otherwise clients could bypass the workflow wrappers. The exposed endpoints
+should be only the three wrappers that call `dispatch_read_only_mcp_tool`.
 
 ## Enforcement semantics
 
