@@ -78,7 +78,18 @@ class SubprocessHandlerRunner:
         import resource
         cpu_seconds = max(1, math.ceil(self.timeout_seconds))
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
-        resource.setrlimit(resource.RLIMIT_AS, (self.memory_limit_bytes, self.memory_limit_bytes))
+        # Android's bionic linker may abort before Python starts when RLIMIT_AS
+        # is imposed (linker_cfi.cpp: MapShadow CHECK). Do not apply this limit
+        # on Android; the subprocess backend is a resource-control boundary,
+        # not a security sandbox, and Android therefore has weaker memory
+        # enforcement. Keep the other limits active.
+        is_android = (
+            sys.platform == "android"
+            or callable(getattr(sys, "getandroidapilevel", None))
+            or ("ANDROID_ROOT" in os.environ and "ANDROID_DATA" in os.environ)
+        )
+        if not is_android:
+            resource.setrlimit(resource.RLIMIT_AS, (self.memory_limit_bytes, self.memory_limit_bytes))
         resource.setrlimit(resource.RLIMIT_FSIZE, (self.max_output_bytes, self.max_output_bytes))
         resource.setrlimit(resource.RLIMIT_NOFILE, (self.max_open_files, self.max_open_files))
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
