@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 from typing import Any
 from uuid import uuid4
 
+from .core import WorkflowCore
 from .models import Task, ToolResult, WorkflowStatus
 from .tools import ToolRegistry
 
@@ -74,6 +75,11 @@ def register_read_only_mcp_tools(
 
     if not callable(status) or not callable(list_files) or not callable(read_file):
         raise TypeError("all MCP tool arguments must be callable")
+    conflicts = ALLOWED_TOOL_NAMES.intersection(registry.registered_kinds())
+    if conflicts:
+        raise ValueError(
+            f"handlers already registered for: {', '.join(sorted(conflicts))}"
+        )
 
     def status_handler(task: Task) -> ToolResult:
         invalid = _empty_payload(task)
@@ -99,7 +105,7 @@ def register_read_only_mcp_tools(
 
 
 def dispatch_read_only_mcp_tool(
-    core: Any,
+    core: WorkflowCore,
     *,
     kind: str,
     payload: Mapping[str, Any] | None = None,
@@ -111,7 +117,7 @@ def dispatch_read_only_mcp_tool(
     This function does not itself register or expose MCP endpoints.
     """
 
-    if kind not in ALLOWED_TOOL_NAMES:
+    if not isinstance(kind, str) or kind not in ALLOWED_TOOL_NAMES:
         raise MCPAdapterError(f"MCP operation is not allowlisted: {kind!r}")
     if payload is None:
         safe_payload: dict[str, Any] = {}
