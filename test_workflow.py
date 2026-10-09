@@ -73,7 +73,17 @@ class WorkflowTests(unittest.TestCase):
             ToolResult(ok=True, output={"x": 1}), policy
         )
         self.assertEqual(status, WorkflowStatus.BLOCKED)
-        self.assertEqual(len(checks), 1)
+        self.assertIn("mandatory_policy_checks", [check.name for check in checks])
+
+    def test_verifier_blocks_policy_missing_mandatory_check_if_validation_is_bypassed(self):
+        policy = object.__new__(GovernancePolicy)
+        object.__setattr__(policy, "required_checks", ("tool_succeeded",))
+        checks, status = ResultVerifier().verify(
+            ToolResult(ok=True, output=None), policy
+        )
+        self.assertEqual(status, WorkflowStatus.BLOCKED)
+        self.assertIn("mandatory_policy_checks", [check.name for check in checks])
+        self.assertIn("result_present", [check.name for check in checks])
 
     def test_empty_policy_rejected(self):
         with self.assertRaises(ValueError):
@@ -110,12 +120,9 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             Task("t-10", "echo", payload=None)
 
-    def test_policy_can_require_only_selected_checks(self):
-        registry = ToolRegistry()
-        registry.register("custom", lambda task: ToolResult(ok=True, output=None))
-        core = WorkflowCore(registry, GovernancePolicy(required_checks=("tool_succeeded",)))
-        report = core.run(Task("t-7", "custom"))
-        self.assertEqual(report.status, WorkflowStatus.PASS)
+    def test_policy_cannot_disable_mandatory_baseline_checks(self):
+        with self.assertRaisesRegex(ValueError, "mandatory checks cannot be disabled"):
+            GovernancePolicy(required_checks=("tool_succeeded",))
 
 
 if __name__ == "__main__":
