@@ -1,0 +1,47 @@
+name: Docker sandbox integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and test runner
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+      - name: Start isolated local registry
+        run: |
+          docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 registry:2
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5000/v2/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "local registry did not become ready" >&2
+          exit 1
+      - name: Build and publish ephemeral test image to local registry
+        run: |
+          docker build --pull -f tests/docker/Dockerfile -t localhost:5000/authoritylab-integration:ci .
+          docker push localhost:5000/authoritylab-integration:ci
+          IMAGE_DIGEST="$(docker image inspect localhost:5000/authoritylab-integration:ci --format='{{index .RepoDigests 0}}')"
+          test -n "$IMAGE_DIGEST"
+          echo "AUTHORITYLAB_DOCKER_TEST_IMAGE=$IMAGE_DIGEST" >> "$GITHUB_ENV"
+      - name: Run real-container integration tests
+        run: python -m pytest -q tests/docker/test_docker_runtime_integration.py
+      - name: Collect Docker diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a
+          docker logs authoritylab-registry || true
+          docker image ls
