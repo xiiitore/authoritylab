@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,7 +32,7 @@ from authoritylab.termux_mcp_adapter import (
 from authoritylab.tools import ToolRegistry
 
 
-ROOT = Path.home() / "mcp-share"
+ROOT = Path(os.environ.get("AUTHORITYLAB_MCP_ROOT", str(Path.home() / "mcp-share"))).absolute()
 MAX_FILE_BYTES = 200_000
 
 server = MCPServer(
