@@ -69,9 +69,10 @@ filesystem confinement, symlink checks, UTF-8 handling, and 200 KB limit.
 
 ## Tests
 
-Run from the repository root:
+Run from the repository root in the project's Python environment:
 
 ```bash
+python -m pip install -e .
 python -m unittest test_termux_mcp_adapter test_termux_mcp_dispatch -v
 python -m unittest discover -v
 ```
