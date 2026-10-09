@@ -60,7 +60,7 @@ def _list_files_output(value: Any) -> ToolResult:
             or not item
             or item in {".", ".."}
             or "/" in item
-            or "\\x00" in item
+            or "\x00" in item
             for item in value
         )
     ):
