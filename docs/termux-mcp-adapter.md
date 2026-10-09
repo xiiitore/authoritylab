@@ -60,6 +60,29 @@ In the existing Termux environment where the MCP SDK is installed, also run:
 python examples/termux_mcp_server_authoritylab.py --check
 ```
 
-This last command checks that the reference server can load and call its
+This last command checks the exact exposed MCP tool set and calls its
 registered `status` tool. It is a separate platform/integration check; the
 GitHub CI job does not install or emulate the Termux MCP runtime.
+
+To run that check without changing the existing dirty clone or the active
+Python environment, use the already-active Termux MCP virtual environment and
+stage a separate checkout plus a temporary package target:
+
+```bash
+AUDIT_DIR="$HOME/authoritylab-termux-audit"
+if [ -e "$AUDIT_DIR" ]; then
+  echo "Audit path already exists; choose a new AUDIT_DIR."
+  exit 1
+fi
+git clone --branch feature/termux-mcp-readonly-adapter --single-branch \
+  https://github.com/xiiitore/authoritylab.git "$AUDIT_DIR"
+SITE_DIR="$(mktemp -d "$HOME/authoritylab-termux-site.XXXXXX")"
+python -m pip install --target "$SITE_DIR" "$AUDIT_DIR"
+PYTHONPATH="$SITE_DIR" python \
+  "$AUDIT_DIR/examples/termux_mcp_server_authoritylab.py" --check
+```
+
+The commands intentionally do not replace `~/termux_mcp_server.py`, check out
+the feature branch in the existing working tree, or install AuthorityLab into
+the active virtual environment. Keep the temporary audit directory until the
+smoke-check output has been reviewed.
