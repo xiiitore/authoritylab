@@ -55,10 +55,11 @@ class DispatchGateTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "ready")
         sink.assert_called_once()
-        report = sink.call_args.args[0]
-        self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual(report.audit["kind"], "status")
-        self.assertNotIn("output", report.audit)
+        event = sink.call_args.args[0]
+        self.assertEqual(event["status"], WorkflowStatus.PASS.value)
+        self.assertEqual(event["audit"]["kind"], "status")
+        self.assertNotIn("output", event)
+        self.assertNotIn("tool_result", event)
 
     def test_audit_sink_failure_withholds_result(self) -> None:
         sink = Mock(side_effect=RuntimeError("audit unavailable"))
