@@ -98,6 +98,26 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.read_file.assert_not_called()
 
+    def test_status_rejects_malformed_output(self) -> None:
+        self.status.return_value = {"status": "ready"}
+        report = self.core.run(Task("t-status-malformed", "status"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("malformed fields", report.tool_result.error)
+
+    def test_list_files_rejects_non_string_entries(self) -> None:
+        self.list_files.return_value = ["notes.txt", 7]
+        report = self.core.run(Task("t-list-malformed", "list_files"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("list of strings", report.tool_result.error)
+
+    def test_read_file_rejects_non_text_output(self) -> None:
+        self.read_file.return_value = b"not text"
+        report = self.core.run(
+            Task("t-read-malformed", "read_file", {"path": "notes.txt"})
+        )
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("must return text", report.tool_result.error)
+
     def test_tool_exception_does_not_pass(self) -> None:
         self.read_file.side_effect = OSError("read failed")
         report = self.core.run(
