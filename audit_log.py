@@ -59,8 +59,11 @@ class DurableAuditLog:
         flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(self.path, flags, 0o600)
         try:
-            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
                 raise ValueError("audit path must refer to a regular file")
+            if metadata.st_nlink != 1:
+                raise ValueError("hard-linked audit files are not permitted")
             os.fchmod(descriptor, 0o600)
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             previous_hash = self._read_and_validate(descriptor)
@@ -97,8 +100,11 @@ class DurableAuditLog:
         except FileNotFoundError:
             return True
         try:
-            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
                 raise ValueError("audit path must refer to a regular file")
+            if metadata.st_nlink != 1:
+                raise ValueError("hard-linked audit files are not permitted")
             fcntl.flock(descriptor, fcntl.LOCK_SH)
             self._read_and_validate(descriptor)
             return True
