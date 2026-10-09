@@ -34,7 +34,9 @@ Handlers are blocked by default and must be explicitly registered with `trusted=
 
 ## Execution backend boundary
 
-The default runner executes in-process. `SubprocessHandlerRunner` can enforce a wall-clock timeout and POSIX CPU, address-space, output-file, and open-file limits for importable top-level handlers. It uses JSON input/output and strips most inherited environment variables. This is process separation for reliability and resource control, not a security sandbox: the child has the same OS identity and may access files and network resources allowed to that identity. Do not run hostile code with this backend; use a properly configured container or OS sandbox.
+The default runner executes in-process. `SubprocessHandlerRunner` can enforce a wall-clock timeout and POSIX CPU, address-space, output-file, and open-file limits for importable top-level handlers. It uses JSON input/output and strips most inherited environment variables. This is process separation for reliability and resource control, not a security sandbox: the child has the same OS identity and may access files and network resources allowed to that identity.
+
+`DockerSandboxRunner` accepts only a digest-pinned image and uses no runtime image pulls, no network, no host mounts, a read-only root filesystem, dropped capabilities, `no-new-privileges`, a non-root numeric user, and container resource limits. The image must include AuthorityLab and the handler module. The unit suite mocks Docker CLI calls; it does not prove that a real daemon, image, kernel, or deployment configuration is secure. Run adversarial integration tests in the exact target environment before using it with untrusted code.
 
 ## Durable audit
 
