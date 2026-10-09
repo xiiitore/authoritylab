@@ -109,5 +109,78 @@ class SubprocessHandlerRunnerTests(unittest.TestCase):
         self.assertEqual(report.tool_result.output["task_id"], "sub-8")
 
 
+
+class DockerSandboxRunnerTests(unittest.TestCase):
+    IMAGE = "registry.example/authoritylab@sha256:" + ("a" * 64)
+
+    def test_image_must_be_pinned_by_digest(self):
+        from authoritylab.execution import DockerSandboxRunner
+        with self.assertRaises(ValueError):
+            DockerSandboxRunner("registry.example/authoritylab:latest")
+        with self.assertRaises(ValueError):
+            DockerSandboxRunner("-bad@sha256:" + ("a" * 64))
+
+    def test_command_enforces_container_security_controls(self):
+        from unittest.mock import patch
+        from authoritylab.execution import DockerSandboxRunner
+
+        class FakeProcess:
+            pid = 123
+            returncode = 0
+            def __init__(self, kwargs):
+                self.stdout = kwargs["stdout"]
+            def communicate(self, payload, timeout):
+                self.stdout.write(b'{"ok":true,"output":{"sandboxed":true},"error":null}')
+                self.stdout.flush()
+            def wait(self):
+                return 0
+
+        captured = {}
+        def fake_popen(command, **kwargs):
+            captured["command"] = command
+            return FakeProcess(kwargs)
+
+        with patch("authoritylab.execution.subprocess.Popen", side_effect=fake_popen):
+            result = DockerSandboxRunner(self.IMAGE).run(
+                echo_handler, Task("docker-1", "echo")
+            )
+        command = captured["command"]
+        for flag in (
+            "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
+            "--security-opt=no-new-privileges:true", "--pids-limit", "--memory",
+            "--cpus", "--tmpfs", "--user", "--ulimit",
+        ):
+            self.assertIn(flag, command)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.output, {"sandboxed": True})
+
+    def test_docker_timeout_kills_container_and_fails_closed(self):
+        from unittest.mock import patch
+        import subprocess
+        from authoritylab.execution import DockerSandboxRunner
+
+        class FakeProcess:
+            pid = 123
+            returncode = None
+            def __init__(self, kwargs):
+                self.stdout = kwargs["stdout"]
+            def communicate(self, payload, timeout):
+                raise subprocess.TimeoutExpired("docker run", timeout)
+            def wait(self):
+                self.returncode = -9
+                return self.returncode
+
+        with patch("authoritylab.execution.subprocess.Popen", side_effect=lambda command, **kwargs: FakeProcess(kwargs)), \
+             patch("authoritylab.execution.os.killpg") as killpg, \
+             patch("authoritylab.execution.subprocess.run") as docker_cleanup:
+            result = DockerSandboxRunner(self.IMAGE, timeout_seconds=0.1).run(
+                echo_handler, Task("docker-2", "echo")
+            )
+        killpg.assert_called_once()
+        self.assertEqual(docker_cleanup.call_count, 2)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "sandbox handler execution timed out")
+
+
 if __name__ == "__main__":
     unittest.main()
