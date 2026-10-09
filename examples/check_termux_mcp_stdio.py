@@ -7,7 +7,9 @@ file contents and never writes to the shared directory.
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -18,6 +20,31 @@ from mcp.client.stdio import stdio_client
 
 SERVER = Path(__file__).with_name("termux_mcp_server_authoritylab.py")
 EXPECTED_TOOLS = {"status", "list_files", "read_file"}
+
+
+def _extract_string_list(result: object) -> list[str]:
+    """Decode list_files output across common MCP SDK result encodings."""
+    structured = getattr(result, "structuredContent", None)
+    if isinstance(structured, list) and all(isinstance(x, str) for x in structured):
+        return structured
+    if isinstance(structured, dict):
+        for key in ("result", "value", "files"):
+            value = structured.get(key)
+            if isinstance(value, list) and all(isinstance(x, str) for x in value):
+                return value
+
+    for block in getattr(result, "content", []):
+        raw = getattr(block, "text", None)
+        if not isinstance(raw, str):
+            continue
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                value = parser(raw)
+            except (TypeError, ValueError, SyntaxError):
+                continue
+            if isinstance(value, list) and all(isinstance(x, str) for x in value):
+                return value
+    return []
 
 
 async def main() -> None:
@@ -50,25 +77,8 @@ async def main() -> None:
                 raise AssertionError("list_files tool returned an MCP error")
             print("PASS: list_files tool call over stdio")
 
-            # If a shared text file exists, exercise the successful read path
-            # without printing its contents. Otherwise report the limitation.
-            names_in_share = []
-            for block in listing.content:
-                text = getattr(block, "text", None)
-                if text:
-                    # MCP SDK versions may encode list results as JSON text.
-                    import json
-
-                    try:
-                        value = json.loads(text)
-                    except (TypeError, ValueError):
-                        continue
-                    if isinstance(value, list) and all(
-                        isinstance(item, str) for item in value
-                    ):
-                        names_in_share = value
-                        break
-
+            # Exercise a successful read without printing its contents.
+            names_in_share = _extract_string_list(listing)
             if names_in_share:
                 read_result = await session.call_tool(
                     "read_file", {"path": names_in_share[0]}
