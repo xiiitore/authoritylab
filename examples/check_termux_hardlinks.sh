@@ -11,12 +11,14 @@ mkdir "$ROOT"
 printf 'inside target\n' > "$ROOT/original.txt"
 printf 'outside target\n' > "$TMP_ROOT/outside.txt"
 
-if ! ln "$ROOT/original.txt" "$ROOT/alias.txt" 2>/dev/null; then
-  echo "SKIP: shell ln could not create a hard link on this filesystem"
+if ! ln "$ROOT/original.txt" "$ROOT/alias.txt" 2>"$TMP_ROOT/link-error.txt"; then
+  echo "SKIP: shell ln could not create a hard link; filesystem diagnostic:"
+  cat "$TMP_ROOT/link-error.txt"
   exit 0
 fi
-if ! ln "$TMP_ROOT/outside.txt" "$ROOT/outside-alias.txt" 2>/dev/null; then
-  echo "SKIP: shell ln could not create a hard link on this filesystem"
+if ! ln "$TMP_ROOT/outside.txt" "$ROOT/outside-alias.txt" 2>"$TMP_ROOT/link-error.txt"; then
+  echo "SKIP: shell ln could not create an outside-source hard link; diagnostic:"
+  cat "$TMP_ROOT/link-error.txt"
   exit 0
 fi
 
