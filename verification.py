@@ -89,14 +89,17 @@ class ResultVerifier:
                     "required evidence fields are present; factual truth is not established",
                 ))
 
-        # Semantic checks are opt-in and domain-defined. A validator is only run
-        # after structural completeness passes; exceptions/bad returns become UNKNOWN.
-        validator = (
-            self.semantic_validators.resolve(task_kind)
-            if self.semantic_validators is not None else None
-        )
-        if validator is not None:
-            if structurally_valid and isinstance(result.output, Mapping) and isinstance(task_kind, str):
+        # Supplying a registry enables semantic mode: every task must have an
+        # explicit validator, and no validator runs before structural validation.
+        if self.semantic_validators is not None:
+            validator = self.semantic_validators.resolve(task_kind)
+            if validator is None:
+                checks.append(CheckResult(
+                    "semantic_evidence_valid",
+                    CheckStatus.UNKNOWN,
+                    "no semantic validator is registered for this task kind",
+                ))
+            elif structurally_valid and isinstance(result.output, Mapping) and isinstance(task_kind, str):
                 semantic = self.semantic_validators.validate(task_kind, result.output)
                 checks.append(CheckResult(
                     "semantic_evidence_valid", semantic.status, semantic.detail
