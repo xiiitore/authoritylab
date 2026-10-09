@@ -80,8 +80,7 @@ class SemanticVerifierIntegrationTests(unittest.TestCase):
         ))
         checks, status = ResultVerifier(registry).verify(
             ToolResult(ok=True, output={"source_id": "s-1", "claim": "wrong"}),
-            self.policy,
-            "lookup",
+            self.policy, "lookup",
         )
         self.assertEqual(status, WorkflowStatus.FAIL)
         semantic = next(c for c in checks if c.name == "semantic_evidence_valid")
@@ -108,11 +107,19 @@ class SemanticVerifierIntegrationTests(unittest.TestCase):
         ))
         checks, status = ResultVerifier(registry).verify(
             ToolResult(ok=True, output={"source_id": "s-1", "claim": "valid"}),
-            self.policy,
-            "lookup",
+            self.policy, "lookup",
         )
         self.assertEqual(status, WorkflowStatus.PASS)
         self.assertEqual([c.status for c in checks[-2:]], [CheckStatus.PASS, CheckStatus.PASS])
+
+    def test_missing_task_validator_prevents_pass_when_semantic_mode_enabled(self):
+        checks, status = ResultVerifier(SemanticValidatorRegistry()).verify(
+            ToolResult(ok=True, output={"source_id": "s-1", "claim": "present"}),
+            self.policy, "lookup",
+        )
+        self.assertEqual(status, WorkflowStatus.UNKNOWN)
+        semantic = next(c for c in checks if c.name == "semantic_evidence_valid")
+        self.assertEqual(semantic.status, CheckStatus.UNKNOWN)
 
     def test_semantic_registry_type_is_checked(self):
         with self.assertRaises(TypeError):
