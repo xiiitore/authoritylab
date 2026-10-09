@@ -49,7 +49,7 @@ class WorkflowCore:
                 error=f"handler raised {type(exc).__name__}",
             )
 
-        checks, status = self.verifier.verify(result, self.policy)
+        checks, status = self.verifier.verify(result, self.policy, task.kind)
         outcome = "completed" if status == WorkflowStatus.PASS else "completed with non-pass status"
         return WorkflowReport(
             task_id=task.task_id,
