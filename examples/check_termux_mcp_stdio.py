@@ -52,8 +52,8 @@ async def main() -> None:
     if not SERVER.is_file():
         raise RuntimeError(f"Reference server not found: {SERVER}")
 
-    # Seed a valid fixture in a temporary HOME. This does not touch the user's
-    # real ~/mcp-share directory and lets the smoke test require a positive read.
+    # Seed a valid fixture in a temporary directory and explicitly configure
+    # the child server root. This never touches the user's real ~/mcp-share.
     with tempfile.TemporaryDirectory(prefix="authoritylab-mcp-stdio-") as temp_home:
         share = Path(temp_home) / "mcp-share"
         share.mkdir()
@@ -62,7 +62,7 @@ async def main() -> None:
         )
 
         child_env = dict(os.environ)
-        child_env["HOME"] = temp_home
+        child_env["AUTHORITYLAB_MCP_ROOT"] = str(share)
         params = StdioServerParameters(
             command=sys.executable,
             args=[str(SERVER)],
