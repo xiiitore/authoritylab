@@ -13,7 +13,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Protocol
 
 from .models import Task, ToolResult
@@ -253,10 +253,6 @@ class DockerSandboxRunner:
                 self._stop_container(name)
                 return ToolResult(ok=False, error="sandbox handler output exceeded max_output_bytes")
             if process.returncode != 0:
-                stderr_file.seek(0)
-                error_output = stderr_file.read(self.max_output_bytes + 1)
-                if len(error_output) > self.max_output_bytes:
-                    error_output = error_output[:self.max_output_bytes]
                 self._stop_container(name)
                 raise ExecutionBlockedError("Docker sandbox container failed to start or complete")
         try:
