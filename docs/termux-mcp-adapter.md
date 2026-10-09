@@ -33,9 +33,11 @@ should be only the three wrappers that call `dispatch_read_only_mcp_tool`.
 - `PASS` means the configured AuthorityLab result checks passed. It is not a
   security certification and does not replace filesystem-level validation.
 - Audit records remain in memory unless the host application persists them.
-- The confined reader mitigates symlink replacement races by opening path
-  components relative to held directory descriptors; it does not provide a
-  durable audit log or protect against every same-user filesystem threat.
+- The reader rejects a symlinked root, rejects symlinked path components, and
+  rejects files with multiple hard links. Directory listing also uses a held
+  directory descriptor and excludes symlinks and hard-linked entries.
+- These controls reduce path-substitution risk; they do not protect against
+  every same-user filesystem threat. Audit records are not durable by default.
 
 ## Tests
 
@@ -46,3 +48,13 @@ python -m pip install -e .
 python -m unittest test_termux_mcp_adapter test_termux_mcp_dispatch -v
 python -m unittest discover -v
 ```
+
+In the existing Termux environment where the MCP SDK is installed, also run:
+
+```bash
+python examples/termux_mcp_server_authoritylab.py --check
+```
+
+This last command checks that the reference server can load and call its
+registered `status` tool. It is a separate platform/integration check; the
+GitHub CI job does not install or emulate the Termux MCP runtime.
