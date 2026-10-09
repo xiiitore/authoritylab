@@ -37,7 +37,15 @@ class DispatchGateTests(unittest.TestCase):
         result = dispatch_read_only_mcp_tool(
             self.core, kind="status", payload={}
         )
-        self.assertEqual(result, {"status": "ready"})
+        self.assertEqual(
+            result,
+            {
+                "status": "ready",
+                "directory_exists": True,
+                "directory": "/tmp/mcp-share",
+                "max_file_bytes": 200_000,
+            },
+        )
         self.status.assert_called_once_with()
 
     def test_unknown_operation_is_rejected_before_workflow(self) -> None:
