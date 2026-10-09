@@ -119,6 +119,8 @@ class DockerSandboxRunnerTests(unittest.TestCase):
             DockerSandboxRunner("registry.example/authoritylab:latest")
         with self.assertRaises(ValueError):
             DockerSandboxRunner("-bad@sha256:" + ("a" * 64))
+        with self.assertRaises(ValueError):
+            DockerSandboxRunner(self.IMAGE, docker_executable="docker")
 
     def test_command_enforces_container_security_controls(self):
         from unittest.mock import patch
@@ -145,6 +147,7 @@ class DockerSandboxRunnerTests(unittest.TestCase):
                 echo_handler, Task("docker-1", "echo")
             )
         command = captured["command"]
+        self.assertEqual(command[0], "/usr/bin/docker")
         for flag in (
             "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
             "--security-opt=no-new-privileges:true", "--pids-limit", "--memory",
@@ -178,6 +181,7 @@ class DockerSandboxRunnerTests(unittest.TestCase):
             )
         killpg.assert_called_once()
         self.assertEqual(docker_cleanup.call_count, 2)
+        self.assertTrue(all(call.args[0][0] == "/usr/bin/docker" for call in docker_cleanup.call_args_list))
         self.assertFalse(result.ok)
         self.assertEqual(result.error, "sandbox handler execution timed out")
 
