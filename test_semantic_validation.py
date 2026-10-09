@@ -130,6 +130,31 @@ class SemanticVerifierIntegrationTests(unittest.TestCase):
         self.assertEqual(status, WorkflowStatus.PASS)
         self.assertEqual([c.status for c in checks[-2:]], [CheckStatus.PASS, CheckStatus.PASS])
 
+    def test_semantic_blocked_status_blocks_workflow(self):
+        registry = SemanticValidatorRegistry()
+        registry.register("lookup", lambda evidence: SemanticValidationResult(
+            CheckStatus.BLOCKED, "required independent source is unavailable"
+        ))
+        _, status = ResultVerifier(registry).verify(
+            ToolResult(ok=True, output={"source_id": "s-1", "claim": "valid"}),
+            self.policy, "lookup",
+        )
+        self.assertEqual(status, WorkflowStatus.BLOCKED)
+
+    def test_semantic_validator_exception_propagates_as_unknown_workflow(self):
+        registry = SemanticValidatorRegistry()
+        def broken(evidence):
+            raise RuntimeError("sensitive internal detail")
+        registry.register("lookup", broken)
+        checks, status = ResultVerifier(registry).verify(
+            ToolResult(ok=True, output={"source_id": "s-1", "claim": "valid"}),
+            self.policy, "lookup",
+        )
+        self.assertEqual(status, WorkflowStatus.UNKNOWN)
+        semantic = next(c for c in checks if c.name == "semantic_evidence_valid")
+        self.assertEqual(semantic.status, CheckStatus.UNKNOWN)
+        self.assertNotIn("sensitive internal detail", semantic.detail)
+
     def test_missing_task_validator_prevents_pass_when_semantic_mode_enabled(self):
         checks, status = ResultVerifier(SemanticValidatorRegistry()).verify(
             ToolResult(ok=True, output={"source_id": "s-1", "claim": "present"}),
