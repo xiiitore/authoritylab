@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +9,8 @@ from authoritylab.audit_log import DurableAuditLog
 
 
 class DurableAuditLogTests(unittest.TestCase):
+    KEY = b"test-integrity-key-that-is-at-least-32-bytes-long"
+
     def test_append_generates_stable_ids_and_verifiable_hash_chain(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "audit.jsonl")
@@ -29,6 +33,67 @@ class DurableAuditLogTests(unittest.TestCase):
             path.write_text(json.dumps(record) + "\n")
             with self.assertRaisesRegex(ValueError, "audit chain invalid"):
                 log.verify()
+
+    def test_signed_chain_verifies_only_with_the_correct_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "signed.jsonl")
+            signed = DurableAuditLog(path, integrity_key=self.KEY)
+            signed.append({"task_id": "signed-1", "status": "PASS"})
+            self.assertTrue(signed.verify())
+            with self.assertRaisesRegex(ValueError, "signature key required"):
+                DurableAuditLog(path).verify()
+            with self.assertRaisesRegex(ValueError, "signature invalid"):
+                DurableAuditLog(path, integrity_key=b"x" * 32).verify()
+
+    def test_hmac_detects_a_rewritten_hash_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "signed.jsonl"
+            log = DurableAuditLog(str(path), integrity_key=self.KEY)
+            log.append({"task_id": "signed-1", "status": "PASS"})
+            record = json.loads(path.read_text())
+            record["event"]["status"] = "FAIL"
+            unhashed = {key: value for key, value in record.items() if key not in {"hash", "signature"}}
+            canonical = json.dumps(unhashed, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+            record["hash"] = hashlib.sha256(canonical).hexdigest()
+            path.write_text(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+            with self.assertRaisesRegex(ValueError, "signature invalid"):
+                log.verify()
+
+    def test_signed_log_cannot_be_mixed_with_unsigned_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "mixed.jsonl")
+            DurableAuditLog(path).append({"task_id": "unsigned", "status": "PASS"})
+            signed = DurableAuditLog(path, integrity_key=self.KEY)
+            with self.assertRaisesRegex(ValueError, "signature missing"):
+                signed.append({"task_id": "signed", "status": "PASS"})
+
+    def test_record_size_limit_rejects_append_before_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "bounded.jsonl")
+            log = DurableAuditLog(path, max_record_bytes=256)
+            with self.assertRaisesRegex(ValueError, "exceeds max_record_bytes"):
+                log.append({"payload": "x" * 500})
+            self.assertTrue(log.verify())
+            self.assertEqual(Path(path).read_bytes(), b"")
+
+    def test_symlink_audit_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.jsonl"
+            link = Path(directory) / "link.jsonl"
+            target.write_text("")
+            os.symlink(target, link)
+            with self.assertRaises(OSError):
+                DurableAuditLog(str(link)).append({"task_id": "x"})
+
+    def test_constructor_rejects_weak_keys_and_invalid_record_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "audit.jsonl")
+            with self.assertRaises(ValueError):
+                DurableAuditLog(path, integrity_key=b"short")
+            with self.assertRaises(ValueError):
+                DurableAuditLog(path, max_record_bytes=0)
+            with self.assertRaises(ValueError):
+                DurableAuditLog(path, max_record_bytes=True)
 
     def test_missing_file_is_a_valid_empty_log(self):
         with tempfile.TemporaryDirectory() as directory:
