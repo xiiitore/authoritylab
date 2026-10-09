@@ -9,6 +9,7 @@ from authoritylab import Task, WorkflowCore, WorkflowStatus
 from authoritylab.termux_mcp_adapter import (
     MCPAdapterError,
     dispatch_read_only_mcp_tool,
+    read_only_mcp_governance_policy,
     register_read_only_mcp_tools,
 )
 from authoritylab.tools import ToolRegistry
@@ -31,7 +32,7 @@ class DispatchGateTests(unittest.TestCase):
             list_files=self.list_files,
             read_file=self.read_file,
         )
-        self.core = WorkflowCore(registry)
+        self.core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
 
     def test_allowlisted_operation_returns_verified_output(self) -> None:
         result = dispatch_read_only_mcp_tool(
