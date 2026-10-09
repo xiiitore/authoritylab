@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,7 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from authoritylab import GovernancePolicy, WorkflowCore
+from authoritylab import GovernancePolicy, WorkflowCore, WorkflowReport
 from authoritylab.secure_paths import (
     is_confined_directory,
     list_confined_files,
@@ -82,12 +83,29 @@ workflow = WorkflowCore(
 )
 
 
+def _audit_report(report: WorkflowReport) -> None:
+    """Write metadata-only audit records to stderr, never file contents."""
+    record = {
+        "audit": dict(report.audit),
+        "status": report.status.value,
+        "checks": [
+            {"name": check.name, "status": check.status.value}
+            for check in report.checks
+        ],
+        "tool_succeeded": (
+            report.tool_result.ok if report.tool_result is not None else None
+        ),
+    }
+    print(json.dumps(record, sort_keys=True), file=sys.stderr, flush=True)
+
+
 def _dispatch(kind: str, payload: dict[str, Any]) -> Any:
     try:
         return dispatch_read_only_mcp_tool(
             workflow,
             kind=kind,
             payload=payload,
+            audit_sink=_audit_report,
         )
     except MCPAdapterError as exc:
         raise ToolError(str(exc)) from None
