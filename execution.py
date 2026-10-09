@@ -166,6 +166,8 @@ class DockerSandboxRunner:
         import re
         if not isinstance(image, str) or not re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", image) or image.startswith("-"):
             raise ValueError("image must be pinned by a full sha256 digest")
+        if not isinstance(docker_executable, str) or not os.path.isabs(docker_executable):
+            raise ValueError("docker_executable must be an absolute path")
         if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be a finite positive number")
         if isinstance(cpus, bool) or not isinstance(cpus, (int, float)) or not math.isfinite(cpus) or cpus <= 0:
