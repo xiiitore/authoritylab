@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock
 
-from authoritylab import Task, WorkflowCore, WorkflowStatus
+from authoritylab import Task, ToolResult, WorkflowCore, WorkflowStatus
 from authoritylab.termux_mcp_adapter import register_read_only_mcp_tools
 from authoritylab.tools import ToolRegistry
 
@@ -29,6 +29,18 @@ class TermuxMCPAdapterTests(unittest.TestCase):
             self.registry.registered_kinds(),
             ("list_files", "read_file", "status"),
         )
+
+    def test_registration_conflict_does_not_partially_register_handlers(self) -> None:
+        registry = ToolRegistry()
+        registry.register("read_file", lambda task: ToolResult(ok=True, output="existing"))
+        with self.assertRaisesRegex(ValueError, "handlers already registered"):
+            register_read_only_mcp_tools(
+                registry,
+                status=self.status,
+                list_files=self.list_files,
+                read_file=self.read_file,
+            )
+        self.assertEqual(registry.registered_kinds(), ("read_file",))
 
     def test_status_calls_existing_tool(self) -> None:
         report = self.core.run(Task("t-status", "status"))
