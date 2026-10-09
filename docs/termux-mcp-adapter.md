@@ -32,7 +32,12 @@ should be only the three wrappers that call `dispatch_read_only_mcp_tool`.
   `MCPAdapterError`, which the MCP wrapper should convert to `ToolError`.
 - `PASS` means the configured AuthorityLab result checks passed. It is not a
   security certification and does not replace filesystem-level validation.
-- Audit records remain in memory unless the host application persists them.
+- The dispatch API accepts an optional `audit_sink`. If configured, it receives
+  each workflow report; if it raises, the result is withheld. Without a sink,
+  the report is discarded after dispatch.
+- The reference server emits metadata-only JSON audit lines to stderr. It does
+  not log file contents or write audit files; stderr retention depends on the
+  host process manager.
 - The reader rejects a symlinked root, rejects symlinked path components, and
   rejects files with multiple hard links. Directory listing also uses a held
   directory descriptor and excludes symlinks and hard-linked entries.
