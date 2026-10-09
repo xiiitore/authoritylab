@@ -35,7 +35,7 @@ See `basic_workflow.py` in the repository root. Architecture and status definiti
 - `BLOCKED`: no handler exists, a handler is registered but not allow-listed as trusted, mandatory policy configuration is invalid, or configured durable audit storage fails.
 - `UNKNOWN`: no structural schema is configured, required evidence fields are missing, or semantic mode is enabled but a task validator is missing or cannot produce a valid decision.
 
-Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values.
+Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source_id", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values.
 
 ### Optional semantic validation
 
