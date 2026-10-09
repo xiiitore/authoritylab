@@ -50,7 +50,15 @@ class TermuxMCPAdapterTests(unittest.TestCase):
     def test_status_calls_existing_tool(self) -> None:
         report = self.core.run(Task("t-status", "status"))
         self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual(report.tool_result.output, {"status": "ready"})
+        self.assertEqual(
+            report.tool_result.output,
+            {
+                "status": "ready",
+                "directory_exists": True,
+                "directory": "/tmp/mcp-share",
+                "max_file_bytes": 200_000,
+            },
+        )
         self.status.assert_called_once_with()
 
     def test_list_files_calls_existing_tool(self) -> None:
