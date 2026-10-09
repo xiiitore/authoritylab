@@ -15,11 +15,16 @@ class WorkflowTests(unittest.TestCase):
         report = self.core.run(Task("t-1", "echo", {"x": 1}))
         self.assertEqual(report.status, WorkflowStatus.PASS)
         self.assertEqual([c.status.value for c in report.checks], ["PASS", "PASS"])
+        self.assertEqual(report.audit["status"], "PASS")
+        self.assertEqual([item["name"] for item in report.audit["checks"]],
+                         ["result_present", "tool_succeeded"])
+        self.assertNotIn("output", report.audit)
 
     def test_missing_handler_is_blocked(self):
         report = self.core.run(Task("t-2", "missing"))
         self.assertEqual(report.status, WorkflowStatus.BLOCKED)
         self.assertIsNone(report.route)
+        self.assertEqual(report.audit["status"], "BLOCKED")
 
     def test_missing_output_fails(self):
         self.registry.register("empty", lambda task: ToolResult(ok=True, output=None))
@@ -33,13 +38,15 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertEqual(report.checks[1].detail, "denied")
 
-    def test_handler_exception_is_recorded_as_failure(self):
+    def test_handler_exception_is_recorded_without_exception_message(self):
         def explode(task):
-            raise RuntimeError("boom")
+            raise RuntimeError("secret-value-must-not-leak")
         self.registry.register("explode", explode)
         report = self.core.run(Task("t-5", "explode"))
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertIn("RuntimeError", report.tool_result.error)
+        self.assertNotIn("secret-value", report.tool_result.error)
+        self.assertEqual(report.audit["error_type"], "handler raised RuntimeError")
 
     def test_malformed_handler_return_is_failure(self):
         self.registry.register("malformed", lambda task: {"ok": True})
@@ -89,15 +96,9 @@ class WorkflowTests(unittest.TestCase):
             self.registry.register("bad-handler", None)
 
     def test_handler_names_are_normalized(self):
-        self.registry.register(
-            " echo ",
-            lambda task: ToolResult(ok=True, output="x"),
-        )
+        self.registry.register(" echo ", lambda task: ToolResult(ok=True, output="x"))
         with self.assertRaises(ValueError):
-            self.registry.register(
-                "echo",
-                lambda task: ToolResult(ok=True, output="y"),
-            )
+            self.registry.register("echo", lambda task: ToolResult(ok=True, output="y"))
         report = self.core.run(Task("t-8", "echo"))
         self.assertEqual(report.status, WorkflowStatus.PASS)
 
