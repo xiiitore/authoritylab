@@ -61,6 +61,8 @@ def read_confined_text_file(
             metadata = os.fstat(file_descriptor)
             if not stat.S_ISREG(metadata.st_mode):
                 raise ValueError("Target must be a regular file")
+            if metadata.st_nlink != 1:
+                raise ValueError("Hard-linked files are not permitted")
             if metadata.st_size > max_bytes:
                 raise ValueError(f"File exceeds the {max_bytes}-byte limit")
 
