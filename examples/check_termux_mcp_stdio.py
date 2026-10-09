@@ -2,7 +2,7 @@
 
 Run in the Termux virtual environment with AuthorityLab installed in a target
 directory and that directory included in PYTHONPATH. The script never prints
-file contents and never writes to the shared directory.
+file contents and uses an isolated temporary home for its read fixture.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
@@ -51,50 +52,61 @@ async def main() -> None:
     if not SERVER.is_file():
         raise RuntimeError(f"Reference server not found: {SERVER}")
 
-    params = StdioServerParameters(
-        command=sys.executable,
-        args=[str(SERVER)],
-        env=dict(os.environ),
-    )
+    # Seed a valid fixture in a temporary HOME. This does not touch the user's
+    # real ~/mcp-share directory and lets the smoke test require a positive read.
+    with tempfile.TemporaryDirectory(prefix="authoritylab-mcp-stdio-") as temp_home:
+        share = Path(temp_home) / "mcp-share"
+        share.mkdir()
+        (share / "authoritylab-smoke-test.txt").write_text(
+            "AuthorityLab isolated read test\\n", encoding="utf-8"
+        )
 
-    async with stdio_client(params) as (read_stream, write_stream):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
+        child_env = dict(os.environ)
+        child_env["HOME"] = temp_home
+        params = StdioServerParameters(
+            command=sys.executable,
+            args=[str(SERVER)],
+            env=child_env,
+        )
 
-            listed = await session.list_tools()
-            names = {tool.name for tool in listed.tools}
-            if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
-                raise AssertionError(f"Unexpected MCP tool surface: {sorted(names)!r}")
-            print("PASS: MCP initialize and exact three-tool allowlist")
+        async with stdio_client(params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
 
-            status = await session.call_tool("status", {})
-            if status.is_error:
-                raise AssertionError("status tool returned an MCP error")
-            print("PASS: status tool call over stdio")
+                listed = await session.list_tools()
+                names = {tool.name for tool in listed.tools}
+                if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
+                    raise AssertionError(f"Unexpected MCP tool surface: {sorted(names)!r}")
+                print("PASS: MCP initialize and exact three-tool allowlist")
 
-            listing = await session.call_tool("list_files", {})
-            if listing.is_error:
-                raise AssertionError("list_files tool returned an MCP error")
-            print("PASS: list_files tool call over stdio")
+                status = await session.call_tool("status", {})
+                if status.is_error:
+                    raise AssertionError("status tool returned an MCP error")
+                print("PASS: status tool call over stdio")
 
-            # Exercise a successful read without printing its contents.
-            names_in_share = _extract_string_list(listing)
-            if names_in_share:
-                read_result = await session.call_tool(
-                    "read_file", {"path": names_in_share[0]}
-                )
+                listing = await session.call_tool("list_files", {})
+                if listing.is_error:
+                    raise AssertionError("list_files tool returned an MCP error")
+                print("PASS: list_files tool call over stdio")
+
+                listed_names = _extract_string_list(listing)
+                fixture_name = "authoritylab-smoke-test.txt"
+                if fixture_name not in listed_names:
+                    raise AssertionError(
+                        f"Isolated fixture missing from list_files: {listed_names!r}"
+                    )
+
+                read_result = await session.call_tool("read_file", {"path": fixture_name})
                 if read_result.is_error:
-                    raise AssertionError("read_file failed on a listed file")
-                print("PASS: read_file tool call over stdio (content withheld)")
-            else:
-                print("SKIP: valid read_file call; mcp-share contains no listed files")
+                    raise AssertionError("read_file failed on the isolated fixture")
+                print("PASS: read_file tool call over stdio (fixture content withheld)")
 
-            rejected = await session.call_tool(
-                "read_file", {"path": "../authoritylab-outside-root-check"}
-            )
-            if not rejected.is_error:
-                raise AssertionError("parent-traversal read was not rejected")
-            print("PASS: parent-traversal request rejected over stdio")
+                rejected = await session.call_tool(
+                    "read_file", {"path": "../authoritylab-outside-root-check"}
+                )
+                if not rejected.is_error:
+                    raise AssertionError("parent-traversal read was not rejected")
+                print("PASS: parent-traversal request rejected over stdio")
 
 
 if __name__ == "__main__":
