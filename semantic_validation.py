@@ -41,11 +41,15 @@ class SemanticValidatorRegistry:
         self._validators[task_kind] = validator
 
     def resolve(self, task_kind: str | None) -> SemanticValidator | None:
-        if not isinstance(task_kind, str):
+        if not isinstance(task_kind, str) or not task_kind.strip():
             return None
-        return self._validators.get(task_kind)
+        return self._validators.get(task_kind.strip())
 
     def validate(self, task_kind: str, evidence: Mapping[str, Any]) -> SemanticValidationResult:
+        if not isinstance(evidence, Mapping):
+            return SemanticValidationResult(
+                CheckStatus.UNKNOWN, "semantic evidence must be a mapping"
+            )
         validator = self.resolve(task_kind)
         if validator is None:
             return SemanticValidationResult(CheckStatus.UNKNOWN, "no semantic validator is registered")
