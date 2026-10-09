@@ -4,10 +4,10 @@ The system separates tool execution from evidence sufficiency. A tool can return
 
 | Status | Meaning |
 |---|---|
-| `PASS` | Mandatory execution checks pass and the configured structural evidence schema is satisfied. |
-| `FAIL` | A mandatory execution check fails, or the handler reports failure. |
-| `BLOCKED` | No handler exists, the handler is not explicitly trusted, mandatory policy configuration is invalid, or configured durable audit persistence fails. |
-| `UNKNOWN` | No schema exists for the task kind or required evidence fields are missing/empty. |
+| `PASS` | Mandatory execution checks and the configured structural evidence schema pass; if semantic mode is enabled, the registered task validator also returns `PASS`. |
+| `FAIL` | A mandatory execution check or configured semantic check fails, or the handler reports failure. |
+| `BLOCKED` | No handler exists, the handler is not explicitly trusted, mandatory policy configuration is invalid, a semantic validator explicitly blocks, or configured durable audit persistence fails. |
+| `UNKNOWN` | No schema exists, required evidence is incomplete, or semantic mode is enabled but a validator is missing, raises an exception, or returns an invalid result. |
 
 ## Mandatory execution checks
 
@@ -20,7 +20,13 @@ These checks are necessary but not sufficient. A successful call alone does not 
 
 Configure one `EvidenceSchema` per task kind using `task_kind` and a non-empty tuple of `required_fields`. A schema passes only when the output is a mapping containing every required field with a non-`None` value. Missing schemas or incomplete outputs produce `UNKNOWN`, not `PASS`.
 
-This is a structural check only. It does not verify source authenticity, truth, field semantics, or resistance to fabricated evidence. Domain-specific semantic validators and provenance checks must be supplied by the application before factual verification or acceptance.
+This is a structural check only. It does not verify source authenticity, truth, field semantics, or resistance to fabricated evidence.
+
+## Optional semantic validation
+
+Inject a `SemanticValidatorRegistry` into `ResultVerifier` to enable semantic mode. Each task kind processed in that mode must have an explicit validator. The validator runs only after structural completeness passes. Missing validators, exceptions, non-mapping evidence, and invalid return types produce `UNKNOWN`; an explicit `FAIL` prevents workflow acceptance and an explicit `BLOCKED` blocks it.
+
+A validator is application-supplied and establishes only what its code and inputs actually support. A `PASS` is not universal proof, source authentication, or independent verification. Test each validator against adversarial inputs, missing and malformed evidence, source failures, and boundary conditions. Workflows without a registry remain structural-only and must not be described as semantically verified.
 
 ## Handler trust boundary
 
