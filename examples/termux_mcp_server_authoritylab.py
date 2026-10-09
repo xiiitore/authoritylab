@@ -16,6 +16,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from authoritylab import GovernancePolicy, WorkflowCore
+from authoritylab.secure_paths import read_confined_text_file
 from authoritylab.termux_mcp_adapter import (
     MCPAdapterError,
     dispatch_read_only_mcp_tool,
@@ -36,34 +37,6 @@ server = MCPServer(
         "Never execute shell commands or modify files."
     ),
 )
-
-
-def _safe_file(relative_path: str) -> Path:
-    candidate = Path(relative_path)
-
-    if candidate.is_absolute() or not relative_path:
-        raise ValueError("Provide a relative file path.")
-
-    if ".." in candidate.parts:
-        raise ValueError("Parent-directory traversal is not allowed.")
-
-    # Reject symlinks before resolving the final path. The check/read sequence
-    # is not atomic; do not treat this reference implementation as race-proof.
-    cursor = ROOT
-    for part in candidate.parts:
-        cursor = cursor / part
-        if cursor.is_symlink():
-            raise ValueError("Symbolic links are not allowed.")
-
-    target = (ROOT / candidate).resolve(strict=True)
-
-    if not target.is_relative_to(ROOT):
-        raise ValueError("Path is outside the permitted directory.")
-
-    if not target.is_file():
-        raise ValueError("Target must be a regular file.")
-
-    return target
 
 
 def _status_impl() -> dict[str, Any]:
@@ -92,13 +65,11 @@ def _list_files_impl() -> list[str]:
 
 def _read_file_impl(relative_path: str) -> str:
     try:
-        target = _safe_file(relative_path)
-        size = target.stat().st_size
-        if size > MAX_FILE_BYTES:
-            raise ToolError("File exceeds the 200 KB limit.")
-        return target.read_text(encoding="utf-8")
-    except ToolError:
-        raise
+        return read_confined_text_file(
+            ROOT,
+            relative_path,
+            max_bytes=MAX_FILE_BYTES,
+        )
     except (ValueError, FileNotFoundError, OSError, UnicodeError) as exc:
         raise ToolError(str(exc)) from None
 
