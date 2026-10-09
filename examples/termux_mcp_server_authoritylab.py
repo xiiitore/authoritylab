@@ -18,7 +18,7 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from authoritylab import GovernancePolicy, WorkflowCore
+from authoritylab import WorkflowCore
 from authoritylab.secure_paths import (
     is_confined_directory,
     list_confined_files,
