@@ -46,24 +46,33 @@ def list_confined_files(
         raise ValueError("max_entries must be a non-negative integer")
     if max_entries == 0:
         return []
-    if os.stat not in os.supports_dir_fd or os.stat not in os.supports_follow_symlinks:
-        raise OSError("Platform lacks required safe relative-stat features")
+    if os.open not in os.supports_dir_fd:
+        raise OSError("Platform lacks required safe relative-open features")
 
     root_fd = _open_confined_root(root)
     try:
         names = sorted(os.listdir(root_fd))
         result: list[str] = []
+        open_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        open_flags |= getattr(os, "O_NONBLOCK", 0)
         for name in names:
             try:
-                metadata = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+                entry_fd = os.open(name, open_flags, dir_fd=root_fd)
             except FileNotFoundError:
                 # The entry disappeared during listing; fail closed for this entry.
                 continue
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            except OSError:
+                # Symlinks and entries that cannot be safely opened are excluded.
                 continue
-            result.append(name)
-            if len(result) >= max_entries:
-                break
+            try:
+                metadata = os.fstat(entry_fd)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    continue
+                result.append(name)
+                if len(result) >= max_entries:
+                    break
+            finally:
+                os.close(entry_fd)
         return result
     finally:
         os.close(root_fd)

@@ -56,17 +56,17 @@ class ConfinedReadTests(unittest.TestCase):
         self.assertEqual(list_confined_files(self.root), ["note.txt"])
 
     def test_listing_excludes_entries_reported_as_hard_linked(self) -> None:
-        real_stat = os.stat
+        real_fstat = os.fstat
 
-        def stat_with_multiple_links(path, *args, **kwargs):
-            metadata = real_stat(path, *args, **kwargs)
-            if path == "note.txt" and kwargs.get("dir_fd") is not None:
+        def fstat_with_multiple_links(fd):
+            metadata = real_fstat(fd)
+            if stat.S_ISREG(metadata.st_mode):
                 return SimpleNamespace(st_mode=metadata.st_mode, st_nlink=2)
             return metadata
 
         with patch(
-            "authoritylab.secure_paths.os.stat",
-            side_effect=stat_with_multiple_links,
+            "authoritylab.secure_paths.os.fstat",
+            side_effect=fstat_with_multiple_links,
         ):
             self.assertEqual(list_confined_files(self.root), [])
 
