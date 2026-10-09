@@ -49,6 +49,24 @@ class SemanticValidatorRegistryTests(unittest.TestCase):
         registry.register("lookup", lambda evidence: True)
         self.assertEqual(registry.validate("lookup", {}).status, CheckStatus.UNKNOWN)
 
+    def test_non_mapping_evidence_is_unknown_without_calling_validator(self):
+        calls = []
+        registry = SemanticValidatorRegistry()
+        registry.register("lookup", lambda evidence: calls.append(True) or SemanticValidationResult(
+            CheckStatus.PASS, "must not run"
+        ))
+        result = registry.validate("lookup", ["not", "a", "mapping"])
+        self.assertEqual(result.status, CheckStatus.UNKNOWN)
+        self.assertEqual(calls, [])
+
+    def test_registered_task_kind_is_normalized_for_lookup(self):
+        registry = SemanticValidatorRegistry()
+        validator = lambda evidence: SemanticValidationResult(CheckStatus.PASS, "ok")
+        registry.register(" lookup ", validator)
+        self.assertIs(registry.resolve("lookup"), validator)
+        self.assertIs(registry.resolve(" lookup "), validator)
+        self.assertIsNone(registry.resolve("  "))
+
     def test_duplicate_and_invalid_registrations_are_rejected(self):
         registry = SemanticValidatorRegistry()
         validator = lambda evidence: SemanticValidationResult(CheckStatus.PASS, "ok")
