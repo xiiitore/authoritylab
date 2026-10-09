@@ -22,10 +22,37 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e . pytest
       - name: Start isolated local registry
+        shell: bash
         run: |
-          # Use the public Amazon ECR mirror to avoid Docker Hub anonymous pull limits.
-          docker pull public.ecr.aws/docker/library/registry:2
-          docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 public.ecr.aws/docker/library/registry:2
+          set -euo pipefail
+
+          pull_with_retry() {
+            local image="$1"
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              echo "Pulling ${image} (attempt ${attempt}/5)"
+              if docker pull "${image}"; then
+                return 0
+              fi
+              if [ "${attempt}" -lt 5 ]; then
+                local delay=$((2 ** attempt))
+                echo "Pull failed; retrying in ${delay}s" >&2
+                sleep "${delay}"
+              fi
+            done
+            return 1
+          }
+
+          # Public registries can rate-limit hosted runners. Retry transient
+          # failures, then fall back to Docker Hub's canonical library image.
+          if pull_with_retry public.ecr.aws/docker/library/registry:2; then
+            REGISTRY_IMAGE="public.ecr.aws/docker/library/registry:2"
+          else
+            echo "Amazon ECR mirror unavailable; trying Docker Hub fallback." >&2
+            pull_with_retry docker.io/library/registry:2
+            REGISTRY_IMAGE="docker.io/library/registry:2"
+          fi
+          docker run -d --restart=unless-stopped --name authoritylab-registry -p 127.0.0.1:5000:5000 "${REGISTRY_IMAGE}"
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:5000/v2/ >/dev/null; then exit 0; fi
             sleep 1
