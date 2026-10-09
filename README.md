@@ -6,7 +6,7 @@ AuthorityLab is a small reference implementation for evidence-aware workflow orc
 
 - **Workflow Core** routes tasks only to explicitly registered handlers.
 - **Workflow Tools** are handlers with predictable inputs and outputs.
-- **Governance Policy** defines which checks must run.
+- **Governance Policy** defines required checks while preserving mandatory acceptance invariants.
 - **Verification** keeps execution outcomes separate from acceptance decisions.
 - **Audit records** record the route, check outcomes, status, and non-sensitive result metadata.
 
@@ -30,12 +30,12 @@ See `basic_workflow.py` in the repository root. Architecture and status definiti
 
 ## Status semantics
 
-- `PASS`: all configured checks ran and passed.
-- `FAIL`: a required check ran and failed, or the handler reported failure.
-- `BLOCKED`: a required check was not executable or the route was unavailable.
+- `PASS`: both mandatory baseline checks ran and passed: output is present and the handler reported success.
+- `FAIL`: a mandatory check ran and failed, or the handler reported failure.
+- `BLOCKED`: mandatory policy configuration is missing/malformed, a required check was not executable, or the route was unavailable.
 - `UNKNOWN`: reserved for a future explicit insufficient-evidence check; current built-in checks do not emit it.
 
-A successful tool call alone is not acceptance. The current checks only verify output presence and the handler's success flag; they do not establish factual correctness.
+The mandatory baseline checks cannot be disabled by configuration. The verifier repeats this invariant so bypassing policy-object validation cannot produce a PASS with a missing output. A successful tool call alone is not acceptance: these checks do not establish factual correctness.
 
 ## Current limitations
 
