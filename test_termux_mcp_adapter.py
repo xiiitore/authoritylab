@@ -121,6 +121,17 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertIn("malformed fields", report.tool_result.error)
 
+    def test_status_rejects_ready_when_directory_is_unavailable(self) -> None:
+        self.status.return_value = {
+            "status": "ready",
+            "directory_exists": False,
+            "directory": "/tmp/mcp-share",
+            "max_file_bytes": 200_000,
+        }
+        report = self.core.run(Task("t-status-missing-directory", "status"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("directory is unavailable", report.tool_result.error)
+
     def test_status_rejects_non_ready_status(self) -> None:
         self.status.return_value = {
             "status": "error",

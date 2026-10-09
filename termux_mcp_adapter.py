@@ -66,10 +66,15 @@ def _empty_payload(task: Task) -> ToolResult | None:
 def _status_output(value: Any) -> ToolResult:
     if not isinstance(value, Mapping):
         return ToolResult(ok=False, error="status tool returned a non-mapping result")
+    if value.get("status") != "ready":
+        return ToolResult(ok=False, error="status tool reports that the bridge is not ready")
+    directory_exists = value.get("directory_exists")
+    if type(directory_exists) is not bool:
+        return ToolResult(ok=False, error="status tool returned malformed fields")
+    if not directory_exists:
+        return ToolResult(ok=False, error="permitted directory is unavailable")
     if (
-        value.get("status") != "ready"
-        or type(value.get("directory_exists")) is not bool
-        or not isinstance(value.get("directory"), str)
+        not isinstance(value.get("directory"), str)
         or not value.get("directory")
         or type(value.get("max_file_bytes")) is not int
         or value["max_file_bytes"] <= 0
