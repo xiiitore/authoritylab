@@ -16,7 +16,11 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from authoritylab import GovernancePolicy, WorkflowCore
-from authoritylab.secure_paths import read_confined_text_file
+from authoritylab.secure_paths import (
+    is_confined_directory,
+    list_confined_files,
+    read_confined_text_file,
+)
 from authoritylab.termux_mcp_adapter import (
     MCPAdapterError,
     dispatch_read_only_mcp_tool,
@@ -25,7 +29,7 @@ from authoritylab.termux_mcp_adapter import (
 from authoritylab.tools import ToolRegistry
 
 
-ROOT = (Path.home() / "mcp-share").resolve()
+ROOT = Path.home() / "mcp-share"
 MAX_FILE_BYTES = 200_000
 
 server = MCPServer(
@@ -42,25 +46,16 @@ server = MCPServer(
 def _status_impl() -> dict[str, Any]:
     return {
         "status": "ready",
-        "directory_exists": ROOT.is_dir(),
+        "directory_exists": is_confined_directory(ROOT),
         "directory": str(ROOT),
         "max_file_bytes": MAX_FILE_BYTES,
     }
 
 
 def _list_files_impl() -> list[str]:
-    if not ROOT.is_dir():
+    if not is_confined_directory(ROOT):
         return []
-
-    result: list[str] = []
-    for item in sorted(ROOT.iterdir()):
-        if item.is_symlink() or not item.is_file():
-            continue
-        result.append(item.name)
-        if len(result) >= 100:
-            break
-
-    return result
+    return list_confined_files(ROOT, max_entries=100)
 
 
 def _read_file_impl(relative_path: str) -> str:
