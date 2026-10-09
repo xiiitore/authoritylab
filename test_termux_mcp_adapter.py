@@ -117,6 +117,16 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertIn("malformed fields", report.tool_result.error)
 
+    def test_status_rejects_non_ready_status(self) -> None:
+        self.status.return_value = {
+            "status": "error",
+            "directory_exists": True,
+            "directory": "/tmp/mcp-share",
+            "max_file_bytes": 200_000,
+        }
+        report = self.core.run(Task("t-status-error", "status"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+
     def test_list_files_rejects_non_string_entries(self) -> None:
         self.list_files.return_value = ["notes.txt", 7]
         report = self.core.run(Task("t-list-malformed", "list_files"))
@@ -128,6 +138,11 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         report = self.core.run(Task("t-list-path", "list_files"))
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertIn("direct file names", report.tool_result.error)
+
+    def test_list_files_rejects_backslash_names(self) -> None:
+        self.list_files.return_value = ["folder\\secret.txt"]
+        report = self.core.run(Task("t-list-backslash", "list_files"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
 
     def test_list_files_rejects_more_than_100_entries(self) -> None:
         self.list_files.return_value = [f"file-{i}.txt" for i in range(101)]
