@@ -103,11 +103,14 @@ PYTHONPATH="$SITE_DIR" python "$HOME/authoritylab-termux-audit/examples/check_te
 PYTHONPATH="$SITE_DIR" bash "$HOME/authoritylab-termux-audit/examples/check_termux_hardlinks.sh"
 ```
 
-The stdio check starts a separate reference-server process, initializes a real
-MCP client session, verifies that exactly the three allowed tools are exposed,
-calls status and listing, tries a valid read when a file is available, and
-checks that a parent-traversal read is rejected. It never prints file contents.
-It does not connect to or modify the user's existing MCP server configuration.
+The stdio check starts a separate reference-server process, creates a fixture in a
+fresh temporary directory, and passes that directory to the child through the
+`AUTHORITYLAB_MCP_ROOT` environment setting. The server defaults to
+`~/mcp-share` when that setting is absent. The check initializes a real MCP client
+session, verifies that exactly the three allowed tools are exposed, calls status
+and listing, requires a successful read of the fixture, and checks that a
+parent-traversal read is rejected. It never prints file contents and does not
+connect to or modify the user's existing MCP server configuration.
 
 The hard-link check asks the Termux shell's `ln` command to create actual hard
 links in a fresh temporary directory, verifies the observed link counts, and
