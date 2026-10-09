@@ -123,6 +123,18 @@ class TermuxMCPAdapterTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.FAIL)
         self.assertIn("list of strings", report.tool_result.error)
 
+    def test_list_files_rejects_path_entries(self) -> None:
+        self.list_files.return_value = ["../secret.txt"]
+        report = self.core.run(Task("t-list-path", "list_files"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("direct file names", report.tool_result.error)
+
+    def test_list_files_rejects_more_than_100_entries(self) -> None:
+        self.list_files.return_value = [f"file-{i}.txt" for i in range(101)]
+        report = self.core.run(Task("t-list-too-many", "list_files"))
+        self.assertEqual(report.status, WorkflowStatus.FAIL)
+        self.assertIn("at most 100", report.tool_result.error)
+
     def test_read_file_rejects_non_text_output(self) -> None:
         self.read_file.return_value = b"not text"
         report = self.core.run(
