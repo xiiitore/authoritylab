@@ -85,6 +85,7 @@ class DurableAuditLogTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 DurableAuditLog(str(link)).append({"task_id": "x"})
 
+    @unittest.skipUnless(callable(getattr(os, "link", None)), "os.link is unavailable on this Python build")
     def test_append_rejects_hard_link_without_mutating_target(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "ordinary.txt"
@@ -97,6 +98,7 @@ class DurableAuditLogTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), before)
             self.assertEqual(audit_alias.read_bytes(), before)
 
+    @unittest.skipUnless(callable(getattr(os, "link", None)), "os.link is unavailable on this Python build")
     def test_verify_rejects_hard_linked_audit_path(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "ordinary.txt"
