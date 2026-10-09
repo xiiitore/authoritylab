@@ -8,7 +8,7 @@ AuthorityLab is a reference implementation for evidence-aware workflow orchestra
 - **Workflow Tools** are handlers with predictable inputs and outputs.
 - **Governance Policy** preserves mandatory execution checks and configures task-specific structural evidence schemas.
 - **Verification** separates execution outcomes, structural completeness, and optional domain-specific semantic checks.
-- **Audit records** can be persisted to a local append-only JSONL file with event IDs, provenance fields, and a SHA-256 hash chain.
+- **Audit records** can be persisted to a local append-only JSONL file with event IDs, provenance fields, a SHA-256 hash chain, and optional HMAC-SHA256 signatures.
 
 These module names describe this repository only. They do not imply access to external plugins or privileged system layers.
 
@@ -19,7 +19,7 @@ Python 3.11 or newer. Runtime code uses the standard library. The durable audit 
 From the repository root:
 
 ```bash
-python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation test_subprocess_runner
+python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation
 ```
 
 CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
@@ -71,13 +71,13 @@ For importable top-level handlers, `WorkflowCore(..., execution_runner=Subproces
 
 For a container boundary, use `DockerSandboxRunner(image="registry.example/app@sha256:...")` with a full image digest. The image must already exist locally and contain AuthorityLab plus the importable handler module. The runner uses `--pull=never`, disables container networking, mounts no host paths, makes the root filesystem read-only, drops Linux capabilities, enables `no-new-privileges`, runs as a non-root numeric user, and applies memory, CPU, PID, file-size, open-file, output, and wall-clock limits. A real deployment still depends on the Docker daemon, host kernel, and image provenance; CI tests the command contract with mocks and does not certify a live Docker deployment. Do not run hostile code until the exact target environment has passed adversarial container tests.
 
-To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.jsonl")` and pass it as `audit_log=` to `WorkflowCore`. A configured audit write failure changes the workflow status to `BLOCKED`. The log detects record edits/reordering through a hash chain; it is not signed, and a privileged actor able to rewrite the entire file can rebuild that chain.
+To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.jsonl")` and pass it as `audit_log=` to `WorkflowCore`. A configured audit write failure changes the workflow status to `BLOCKED`. Hash-chain mode detects record edits/reordering, but a privileged actor able to rewrite the entire file can rebuild the chain. For stronger integrity, provide `DurableAuditLog(path, integrity_key=secret_key)`, where `secret_key` is at least 32 bytes obtained from a secret manager or OS-protected configuration. Never commit the key or store it beside the log. Signed logs cannot be verified or extended without the same key; unsigned and signed records cannot be mixed in one chain. Records are size-bounded, and symbolic-link audit paths are rejected on platforms supporting `O_NOFOLLOW`.
 
 ## Current limitations
 
 - No external plugin integrations, authentication, web API, sandbox, or distributed execution.
 - Trusted handlers run in-process and can access the process's resources. **Do not mark untrusted handlers as trusted.** Exception handling is not a sandbox; this repository does not yet provide OS/container isolation, hard resource limits, or reliable handler timeouts.
-- Durable audit is optional, local-filesystem-only, and tamper-evident rather than tamper-proof. Protect the file and directory with OS permissions and independent backups.
+- Durable audit is optional and local-filesystem-only. HMAC signatures improve tamper detection only while the key remains secret; they do not prevent log deletion, key compromise, denial of service, or tampering by an actor who controls both key and log.
 - Structural schemas do not establish factual truth, source provenance, or resistance to fabricated evidence. Semantic validators are explicit application-supplied checks, not a general truth oracle.
 - The project is not a security certification or production-readiness claim.
 
