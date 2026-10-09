@@ -87,3 +87,33 @@ The commands intentionally do not replace `~/termux_mcp_server.py`, check out
 the feature branch in the existing working tree, or install AuthorityLab into
 the active virtual environment. Keep the temporary audit directory until the
 smoke-check output has been reviewed.
+
+### Termux-specific checks
+
+After pulling the branch and building a **fresh** target installation, run the
+stdio-level MCP check and the actual hard-link filesystem check:
+
+```bash
+cd "$HOME/authoritylab-termux-audit" || exit 1
+git pull --ff-only origin feature/termux-mcp-readonly-adapter || exit 1
+SITE_DIR="$(mktemp -d "$HOME/authoritylab-termux-site-check.XXXXXX")" || exit 1
+python -m pip install --no-deps --target "$SITE_DIR" "$HOME/authoritylab-termux-audit" || exit 1
+
+PYTHONPATH="$SITE_DIR" python "$HOME/authoritylab-termux-audit/examples/check_termux_mcp_stdio.py"
+PYTHONPATH="$SITE_DIR" bash "$HOME/authoritylab-termux-audit/examples/check_termux_hardlinks.sh"
+```
+
+The stdio check starts a separate reference-server process, initializes a real
+MCP client session, verifies that exactly the three allowed tools are exposed,
+calls status and listing, tries a valid read when a file is available, and
+checks that a parent-traversal read is rejected. It never prints file contents.
+It does not connect to or modify the user's existing MCP server configuration.
+
+The hard-link check asks the Termux shell's `ln` command to create actual hard
+links in a fresh temporary directory, verifies the observed link counts, and
+checks both listing and read rejection. It deletes only the temporary directory
+it created. If the filesystem or shell cannot create hard links, it reports
+`SKIP`; that is not evidence that real hard-link behavior passed. The Python
+unit tests' mocked metadata checks remain useful but are not a substitute for
+this real filesystem test.
+
