@@ -186,5 +186,52 @@ class DockerSandboxRunnerTests(unittest.TestCase):
         self.assertEqual(result.error, "sandbox handler execution timed out")
 
 
+    def test_docker_daemon_failure_fails_closed_and_attempts_cleanup(self):
+        from unittest.mock import patch
+        from authoritylab.execution import DockerSandboxRunner, ExecutionBlockedError
+
+        class FailedProcess:
+            pid = 321
+            returncode = 125
+            def __init__(self, kwargs):
+                self.stdout = kwargs["stdout"]
+            def communicate(self, payload, timeout):
+                return None
+            def wait(self):
+                return self.returncode
+
+        with (
+            patch("authoritylab.execution.subprocess.Popen", side_effect=lambda command, **kwargs: FailedProcess(kwargs)),
+            patch("authoritylab.execution.subprocess.run") as cleanup,
+        ):
+            with self.assertRaisesRegex(ExecutionBlockedError, "Docker sandbox container failed"):
+                DockerSandboxRunner(self.IMAGE).run(echo_handler, Task("docker-daemon-down", "echo"))
+        self.assertEqual(cleanup.call_count, 2)
+        self.assertEqual(cleanup.call_args_list[0].args[0][1], "kill")
+        self.assertEqual(cleanup.call_args_list[1].args[0][1:3], ["rm", "-f"])
+
+    def test_docker_malformed_handler_output_fails_closed(self):
+        from unittest.mock import patch
+        from authoritylab.execution import DockerSandboxRunner
+
+        class MalformedProcess:
+            pid = 322
+            returncode = 0
+            def __init__(self, kwargs):
+                self.stdout = kwargs["stdout"]
+            def communicate(self, payload, timeout):
+                self.stdout.write(b"this is not json")
+                self.stdout.flush()
+            def wait(self):
+                return self.returncode
+
+        with patch("authoritylab.execution.subprocess.Popen", side_effect=lambda command, **kwargs: MalformedProcess(kwargs)):
+            result = DockerSandboxRunner(self.IMAGE).run(
+                echo_handler, Task("docker-malformed-output", "echo")
+            )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "sandbox handler returned malformed output")
+
+
 if __name__ == "__main__":
     unittest.main()

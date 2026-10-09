@@ -125,9 +125,24 @@ class DurableAuditLog:
                     break
                 if len(line) > self.max_record_bytes + 1 or not line.endswith(b"\n"):
                     raise ValueError("audit chain invalid")
+                def reject_constant(value: str) -> None:
+                    raise ValueError(f"non-standard JSON constant: {value}")
+
+                def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+                    result: dict[str, Any] = {}
+                    for key, value in pairs:
+                        if key in result:
+                            raise ValueError("duplicate JSON object key")
+                        result[key] = value
+                    return result
+
                 try:
-                    record = json.loads(line)
-                except (json.JSONDecodeError, UnicodeDecodeError):
+                    record = json.loads(
+                        line,
+                        parse_constant=reject_constant,
+                        object_pairs_hook=reject_duplicate_keys,
+                    )
+                except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
                     raise ValueError("audit chain invalid") from None
                 if not isinstance(record, dict):
                     raise ValueError("audit chain invalid")
