@@ -143,5 +143,36 @@ class DurableAuditLogTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
 
+    def test_non_finite_json_constants_are_rejected_as_invalid_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "non-finite.jsonl"
+            path.write_text(
+                '{"event_id":"x","recorded_at":"now","previous_hash":"'
+                + ("0" * 64)
+                + '","event":{"value":NaN},"hash":"'
+                + ("0" * 64)
+                + '"}\\n'
+            )
+            with self.assertRaisesRegex(ValueError, "audit chain invalid"):
+                DurableAuditLog(str(path)).verify()
+
+    def test_duplicate_json_keys_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "duplicate.jsonl"
+            path.write_text(
+                '{"event_id":"first","event_id":"second","recorded_at":"now",'
+                '"previous_hash":"' + ("0" * 64) + '","event":{},"hash":"' + ("0" * 64) + '"}\\n'
+            )
+            with self.assertRaisesRegex(ValueError, "audit chain invalid"):
+                DurableAuditLog(str(path)).verify()
+
+    def test_invalid_utf8_is_rejected_as_invalid_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid-utf8.jsonl"
+            path.write_bytes(b'{"event_id":"x","event":\\xff}\\n')
+            with self.assertRaisesRegex(ValueError, "audit chain invalid"):
+                DurableAuditLog(str(path)).verify()
+
+
 if __name__ == "__main__":
     unittest.main()
