@@ -33,8 +33,9 @@ should be only the three wrappers that call `dispatch_read_only_mcp_tool`.
 - `PASS` means the configured AuthorityLab result checks passed. It is not a
   security certification and does not replace filesystem-level validation.
 - The dispatch API accepts an optional `audit_sink`. If configured, it receives
-  each workflow report; if it raises, the result is withheld. Without a sink,
-  the report is discarded after dispatch.
+  a metadata-only event (task metadata, status, check names/statuses, and the
+  tool-success flag), never the tool output or file contents. If it raises, the
+  result is withheld. Without a sink, the report is discarded after dispatch.
 - The reference server emits metadata-only JSON audit lines to stderr. It does
   not log file contents or write audit files; stderr retention depends on the
   host process manager.
