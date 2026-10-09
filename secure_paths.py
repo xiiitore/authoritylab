@@ -1,10 +1,60 @@
-"""Race-resistant, read-only file access confined to a directory."""
+"""Descriptor-based, read-only access confined to a directory."""
 
 from __future__ import annotations
 
 import os
 import stat
 from pathlib import Path, PurePosixPath
+
+
+def _open_confined_root(root: str | os.PathLike[str]) -> int:
+    """Open the configured root itself without following a final symlink."""
+    directory = getattr(os, "O_DIRECTORY", None)
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if directory is None or nofollow is None:
+        raise OSError("Platform lacks required safe directory-open features")
+
+    # abspath normalizes the path without resolving/following symlinks.
+    root_path = Path(os.path.abspath(os.fspath(root)))
+    descriptor = os.open(str(root_path), os.O_RDONLY | directory | nofollow)
+    try:
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise ValueError("Permitted root must be a directory")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def list_confined_files(
+    root: str | os.PathLike[str],
+    *,
+    max_entries: int = 100,
+) -> list[str]:
+    """List regular, single-link files directly in root, without following links."""
+    if type(max_entries) is not int or max_entries < 0:
+        raise ValueError("max_entries must be a non-negative integer")
+    if os.stat not in os.supports_dir_fd or os.stat not in os.supports_follow_symlinks:
+        raise OSError("Platform lacks required safe relative-stat features")
+
+    root_fd = _open_confined_root(root)
+    try:
+        names = sorted(os.listdir(root_fd))
+        result: list[str] = []
+        for name in names:
+            try:
+                metadata = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                # The entry disappeared during listing; fail closed for this entry.
+                continue
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                continue
+            result.append(name)
+            if len(result) >= max_entries:
+                break
+        return result
+    finally:
+        os.close(root_fd)
 
 
 def read_confined_text_file(
@@ -15,11 +65,10 @@ def read_confined_text_file(
 ) -> str:
     """Read a UTF-8 regular file beneath root without following symlinks.
 
-    Opens each path component relative to an already-open directory descriptor,
-    with O_NOFOLLOW. Reads at most max_bytes + 1 bytes to enforce the limit even
-    if a same-user process grows the file after the initial fstat check.
-
-    Fails closed on platforms lacking the required POSIX open flags.
+    Opens the root and each path component relative to held directory
+    descriptors, using O_NOFOLLOW. Rejects hard links, and reads at most
+    max_bytes + 1 bytes to enforce the limit even if the file grows after
+    fstat. Fails closed when the required POSIX features are unavailable.
     """
 
     if not isinstance(relative_path, str):
@@ -39,16 +88,11 @@ def read_confined_text_file(
     if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
         raise OSError("Platform lacks required safe relative-open features")
 
-    root_path = Path(root).resolve(strict=True)
-    if not root_path.is_dir():
-        raise ValueError("Permitted root must be a directory")
-
-    directory_flags = os.O_RDONLY | directory | nofollow
-    file_flags = os.O_RDONLY | nofollow
     descriptors: list[int] = []
-
     try:
-        descriptors.append(os.open(str(root_path), directory_flags))
+        descriptors.append(_open_confined_root(root))
+        directory_flags = os.O_RDONLY | directory | nofollow
+        file_flags = os.O_RDONLY | nofollow
         for component in parts[:-1]:
             descriptors.append(
                 os.open(component, directory_flags, dir_fd=descriptors[-1])
