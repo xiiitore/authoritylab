@@ -32,6 +32,12 @@ A validator is application-supplied and establishes only what its code and input
 
 Handlers are blocked by default and must be explicitly registered with `trusted=True`. This is a caller-controlled allow-list, not process isolation. Trusted handlers execute in-process and can access the process's resources. This implementation does not sandbox handlers, isolate credentials from trusted handlers, or impose hard resource limits/timeouts. Do not register untrusted code.
 
+## Execution backend boundary
+
+The default runner executes in-process. `SubprocessHandlerRunner` can enforce a wall-clock timeout and POSIX CPU, address-space, output-file, and open-file limits for importable top-level handlers. It uses JSON input/output and strips most inherited environment variables. This is process separation for reliability and resource control, not a security sandbox: the child has the same OS identity and may access files and network resources allowed to that identity.
+
+`DockerSandboxRunner` accepts only a digest-pinned image and uses no runtime image pulls, no network, no host mounts, a read-only root filesystem, dropped capabilities, `no-new-privileges`, a non-root numeric user, and container resource limits. The image must include AuthorityLab and the handler module. The unit suite mocks Docker CLI calls; it does not prove that a real daemon, image, kernel, or deployment configuration is secure. Run adversarial integration tests in the exact target environment before using it with untrusted code.
+
 ## Durable audit
 
 The optional local JSONL audit store assigns each event a stable ID and links records with a SHA-256 hash chain. Writes are serialized with POSIX file locking and flushed to disk. Validation streams records and enforces a configurable per-record size bound; symlink paths are rejected where `O_NOFOLLOW` is supported. Hash-chain mode detects edits and reordering but cannot prevent a privileged actor from rewriting the entire file. Optional HMAC-SHA256 signatures detect rewrites by actors who do not possess the key. Supply a secret key of at least 32 bytes from a secret manager or OS-protected configuration; never store it beside the log or in source control. Signed logs require the same key for verification and appending, and signed/unsigned records cannot be mixed. HMAC does not prevent deletion, denial of service, key compromise, or tampering by an actor who controls both key and log. Use OS permissions, independent backups, and external immutable storage for stronger assurance.
