@@ -7,7 +7,7 @@ AuthorityLab is a reference implementation for evidence-aware workflow orchestra
 - **Workflow Core** routes tasks only to explicitly registered and trusted handlers.
 - **Workflow Tools** are handlers with predictable inputs and outputs.
 - **Governance Policy** preserves mandatory execution checks and configures task-specific structural evidence schemas.
-- **Verification** keeps execution outcomes separate from evidence sufficiency.
+- **Verification** separates execution outcomes, structural completeness, and optional domain-specific semantic checks.
 - **Audit records** can be persisted to a local append-only JSONL file with event IDs, provenance fields, and a SHA-256 hash chain.
 
 These module names describe this repository only. They do not imply access to external plugins or privileged system layers.
@@ -19,7 +19,7 @@ Python 3.11 or newer. Runtime code uses the standard library. The durable audit 
 From the repository root:
 
 ```bash
-python -m unittest -v test_workflow test_audit_log test_audit_integration
+python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation
 ```
 
 CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
@@ -30,12 +30,40 @@ See `basic_workflow.py` in the repository root. Architecture and status definiti
 
 ## Status semantics
 
-- `PASS`: both mandatory execution checks passed and a configured task-specific structural evidence schema is satisfied.
-- `FAIL`: a mandatory execution check failed or the handler reported failure.
+- `PASS`: both mandatory execution checks passed and a configured task-specific structural evidence schema is satisfied; if a semantic validator is registered for that task kind, it must also return `PASS`.
+- `FAIL`: a mandatory execution check or configured semantic check failed.
 - `BLOCKED`: no handler exists, a handler is registered but not allow-listed as trusted, mandatory policy configuration is invalid, or configured durable audit storage fails.
-- `UNKNOWN`: no schema is configured for the task kind, or the output does not provide the required fields. The workflow cannot infer truth from missing or structurally insufficient evidence.
+- `UNKNOWN`: no structural schema is configured, required evidence fields are missing, or a configured semantic validator fails to produce a valid decision.
 
-Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values. Domain-specific semantic validators are still required before treating an output as factually verified or accepted.
+Configure a schema with `EvidenceSchema(task_kind="lookup", required_fields=("source", "claim"))` and pass it through `GovernancePolicy(evidence_schemas=(... ,))`. Required fields must exist and be non-`None`. This is only a structural completeness check: it does not authenticate a source, prove a claim, or validate the meaning of arbitrary values.
+
+### Optional semantic validation
+
+Register a domain-specific validator and inject the registry into `ResultVerifier`:
+
+```python
+from authoritylab import (
+    CheckStatus,
+    SemanticValidationResult,
+    SemanticValidatorRegistry,
+)
+from authoritylab.verification import ResultVerifier
+
+validators = SemanticValidatorRegistry()
+validators.register(
+    "lookup",
+    lambda evidence: SemanticValidationResult(
+        CheckStatus.PASS if evidence["source_id"] in {"source-1", "source-2"}
+        else CheckStatus.FAIL,
+        "source identifier accepted by the configured catalogue"
+        if evidence["source_id"] in {"source-1", "source-2"}
+        else "source identifier is not in the configured catalogue",
+    ),
+)
+verifier = ResultVerifier(semantic_validators=validators)
+```
+
+The example demonstrates a domain rule only; it is not a universal source-authentication mechanism. Validators run only after the task's structural schema is satisfied. Exceptions and invalid return types produce `UNKNOWN` without exposing exception messages. Semantic checks are opt-in to preserve existing workflows, so a task without a registered validator is **not** semantically verified merely because structural checks pass. A validator can establish only what its own implementation and evidence support; independent source authentication and truth verification remain application-specific responsibilities.
 
 Handlers are blocked by default. To execute one, the caller must explicitly register it with `trusted=True`. This is a trust allow-list, not a sandbox: the caller must only mark reviewed code it controls as trusted. Untrusted code must not be loaded into this process.
 
@@ -46,7 +74,7 @@ To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.js
 - No external plugin integrations, authentication, web API, sandbox, or distributed execution.
 - Trusted handlers run in-process and can access the process's resources. **Do not mark untrusted handlers as trusted.** Exception handling is not a sandbox; this repository does not yet provide OS/container isolation, hard resource limits, or reliable handler timeouts.
 - Durable audit is optional, local-filesystem-only, and tamper-evident rather than tamper-proof. Protect the file and directory with OS permissions and independent backups.
-- Structural schemas do not establish factual truth, source provenance, or resistance to fabricated evidence.
+- Structural schemas do not establish factual truth, source provenance, or resistance to fabricated evidence. Semantic validators are explicit application-supplied checks, not a general truth oracle.
 - The project is not a security certification or production-readiness claim.
 
 For new gates, add positive, negative, missing-evidence, and boundary tests. Keep network, filesystem, and external-service actions behind explicit adapters.
