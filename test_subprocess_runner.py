@@ -31,6 +31,10 @@ def non_json_handler(task):
     return ToolResult(ok=True, output={"not_json": object()})
 
 
+def huge_output_handler(task):
+    return ToolResult(ok=True, output={"large": "x" * 100_000})
+
+
 class SubprocessHandlerRunnerTests(unittest.TestCase):
     def test_importable_handler_runs_in_child_process(self):
         runner = SubprocessHandlerRunner(timeout_seconds=4)
@@ -59,6 +63,12 @@ class SubprocessHandlerRunnerTests(unittest.TestCase):
         )
         self.assertFalse(result.ok)
         self.assertEqual(result.error, "handler raised TypeError")
+
+    def test_oversized_output_fails_closed(self):
+        result = SubprocessHandlerRunner(timeout_seconds=4, max_output_bytes=1024).run(
+            huge_output_handler, Task("sub-large", "large")
+        )
+        self.assertFalse(result.ok)
 
     def test_lambda_is_rejected_before_execution(self):
         runner = SubprocessHandlerRunner()
