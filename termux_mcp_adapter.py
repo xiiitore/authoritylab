@@ -37,6 +37,35 @@ def _empty_payload(task: Task) -> ToolResult | None:
     return None
 
 
+def _status_output(value: Any) -> ToolResult:
+    if not isinstance(value, Mapping):
+        return ToolResult(ok=False, error="status tool returned a non-mapping result")
+    if (
+        not isinstance(value.get("status"), str)
+        or type(value.get("directory_exists")) is not bool
+        or not isinstance(value.get("directory"), str)
+        or type(value.get("max_file_bytes")) is not int
+        or value["max_file_bytes"] <= 0
+    ):
+        return ToolResult(ok=False, error="status tool returned malformed fields")
+    return ToolResult(ok=True, output=dict(value))
+
+
+def _list_files_output(value: Any) -> ToolResult:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return ToolResult(
+            ok=False,
+            error="list_files tool must return a list of strings",
+        )
+    return ToolResult(ok=True, output=value)
+
+
+def _read_file_output(value: Any) -> ToolResult:
+    if not isinstance(value, str):
+        return ToolResult(ok=False, error="read_file tool must return text")
+    return ToolResult(ok=True, output=value)
+
+
 def _validated_read_path(task: Task) -> str | ToolResult:
     if set(task.payload) != {"path"}:
         return ToolResult(
@@ -85,19 +114,19 @@ def register_read_only_mcp_tools(
         invalid = _empty_payload(task)
         if invalid is not None:
             return invalid
-        return ToolResult(ok=True, output=status())
+        return _status_output(status())
 
     def list_files_handler(task: Task) -> ToolResult:
         invalid = _empty_payload(task)
         if invalid is not None:
             return invalid
-        return ToolResult(ok=True, output=list_files())
+        return _list_files_output(list_files())
 
     def read_file_handler(task: Task) -> ToolResult:
         path = _validated_read_path(task)
         if isinstance(path, ToolResult):
             return path
-        return ToolResult(ok=True, output=read_file(path))
+        return _read_file_output(read_file(path))
 
     registry.register("status", status_handler)
     registry.register("list_files", list_files_handler)
