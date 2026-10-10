@@ -32,6 +32,12 @@ async def main() -> None:
             stderr=subprocess.DEVNULL,
         )
 
+        (root / "test_smoke.py").write_text(
+            "import unittest\\n\\nclass WorkspaceSmoke(unittest.TestCase):\\n"
+            "    def test_fixture(self):\\n        self.assertTrue(True)\\n",
+            encoding="utf-8",
+        )
+
         child_env = {"AUTHORITYLAB_ROOT": str(root), "HOME": temp}
         python_path = os.environ.get("PYTHONPATH")
         if python_path:
