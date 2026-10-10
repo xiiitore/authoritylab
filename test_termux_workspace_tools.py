@@ -1,12 +1,18 @@
 """Tests for the bounded Termux workspace operations."""
 from __future__ import annotations
 
+import inspect
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
 
 from dulwich import porcelain
 
+from authoritylab import termux_mcp_server, termux_workspace_tools
 from authoritylab.termux_workspace_tools import BoundedWorkspace, WorkspaceError
 
 
@@ -33,6 +39,48 @@ class BoundedWorkspaceTests(unittest.TestCase):
         status = self.workspace.status()
         self.assertTrue(status["ready"])
         self.assertNotIn("shell", status["allowed_operations"])
+        self.assertIn("diagnostics", status["allowed_operations"])
+
+    def test_registered_diagnostics_tool_has_no_arguments(self):
+        servers = []
+
+        class FakeFastMCP:
+            def __init__(self, name):
+                self.name = name
+                self.handlers = {}
+                servers.append(self)
+
+            def tool(self):
+                def register(handler):
+                    self.handlers[handler.__name__] = handler
+                    return handler
+                return register
+
+            def run(self, transport):
+                self.transport = transport
+
+        mcp = ModuleType("mcp")
+        mcp.__path__ = []
+        server_package = ModuleType("mcp.server")
+        server_package.__path__ = []
+        fastmcp_module = ModuleType("mcp.server.fastmcp")
+        fastmcp_module.FastMCP = FakeFastMCP
+        with patch.dict(
+            sys.modules,
+            {
+                "mcp": mcp,
+                "mcp.server": server_package,
+                "mcp.server.fastmcp": fastmcp_module,
+            },
+        ), patch.object(
+            termux_mcp_server.os,
+            "getcwd",
+            return_value=str(self.root),
+        ):
+            termux_mcp_server.main()
+
+        handler = servers[0].handlers["diagnostics"]
+        self.assertEqual(list(inspect.signature(handler).parameters), [])
 
     def test_list_skips_git_and_symlinks(self):
         outside = Path(self.temp.name) / "outside.txt"
@@ -118,6 +166,119 @@ class BoundedWorkspaceTests(unittest.TestCase):
 
     def test_git_diff_is_empty_for_clean_tree(self):
         self.assertEqual(self.workspace.git_diff(), "")
+
+    def test_run_tests_reports_os_error_details_without_extra_data(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.subprocess.run",
+            side_effect=PermissionError(13, "permission denied"),
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.run_tests()
+
+        message = str(raised.exception)
+        self.assertIn("operation could not start: PermissionError", message)
+        self.assertIn("permission denied", message)
+        self.assertIn("errno=13", message)
+        self.assertNotIn("Traceback", message)
+        self.assertNotIn("TOKEN_SENTINEL", message)
+
+    def test_diagnostics_has_fixed_scope_and_never_starts_subprocesses(self):
+        files = "/data/data/com.termux/files"
+        home = files + "/home"
+        termux_usr = files + "/usr"
+        expected_paths = {
+            "root": "/",
+            "data": "/data",
+            "data_data": "/data/data",
+            "termux_app": "/data/data/com.termux",
+            "termux_files": files,
+            "termux_usr": termux_usr,
+            "termux_bin": termux_usr + "/bin",
+            "home": home,
+            "venv": home + "/mcp-venv",
+            "venv_bin": home + "/mcp-venv/bin",
+            "python_link": home + "/mcp-venv/bin/python",
+            "python_target_link": termux_usr + "/bin/python",
+            "python_binary": termux_usr + "/bin/python3.13",
+        }
+        self.assertEqual(
+            list(inspect.signature(BoundedWorkspace.diagnostics).parameters),
+            ["self"],
+        )
+
+        with (
+            patch.object(
+                termux_workspace_tools.os,
+                "stat",
+                wraps=termux_workspace_tools.os.stat,
+            ) as stat_call,
+            patch.object(
+                termux_workspace_tools.os,
+                "access",
+                wraps=termux_workspace_tools.os.access,
+            ) as access_call,
+            patch.object(
+                termux_workspace_tools.subprocess,
+                "run",
+                side_effect=AssertionError(
+                    "diagnostics must not spawn a process"
+                ),
+            ),
+        ):
+            result = self.workspace.diagnostics()
+
+        self.assertEqual(
+            {
+                label: path
+                for label, path in termux_workspace_tools._DIAGNOSTIC_PATHS
+            },
+            expected_paths,
+        )
+        self.assertEqual(set(result["paths"]), set(expected_paths))
+        self.assertEqual(
+            {call.args[0] for call in stat_call.call_args_list},
+            set(expected_paths.values()),
+        )
+        self.assertEqual(
+            {call.args[0] for call in access_call.call_args_list},
+            set(expected_paths.values()),
+        )
+        self.assertIn("uid", result)
+        self.assertIn("euid", result)
+        self.assertIn("sys_executable", result)
+        self.assertIn("selinux_context", result)
+        self.assertNotIn("/data/data", json.dumps(result))
+
+    def test_diagnostics_sanitizes_access_and_proc_read_errors(self):
+        with (
+            patch.object(
+                termux_workspace_tools.os,
+                "stat",
+                side_effect=PermissionError(13, "secret path TOKEN_SENTINEL"),
+            ),
+            patch.object(
+                termux_workspace_tools.os,
+                "access",
+                side_effect=PermissionError(13, "secret path TOKEN_SENTINEL"),
+            ),
+            patch(
+                "builtins.open",
+                side_effect=PermissionError(13, "TOKEN_SENTINEL"),
+            ),
+        ):
+            result = self.workspace.diagnostics()
+
+        encoded = json.dumps(result)
+        self.assertEqual(result["selinux_context"]["error"], "PermissionError")
+        self.assertEqual(
+            result["paths"]["python_link"]["stat"]["error"], "PermissionError"
+        )
+        self.assertEqual(
+            result["paths"]["python_link"]["access_x"]["error"],
+            "PermissionError",
+        )
+        self.assertNotIn("TOKEN_SENTINEL", encoded)
+        self.assertNotIn("secret path", encoded)
 
 
 if __name__ == "__main__":

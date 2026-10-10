@@ -9,6 +9,7 @@ import subprocess
 import sys
 from io import BytesIO
 from pathlib import Path, PurePosixPath
+from stat import S_IMODE, S_ISDIR, S_ISREG
 from typing import Any
 
 MAX_FILE_BYTES = 200_000
@@ -16,6 +17,24 @@ MAX_OUTPUT_CHARS = 20_000
 MAX_LIST_ENTRIES = 200
 DEFAULT_TIMEOUT_SECONDS = 120
 _EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules"}
+_DIAGNOSTIC_PATHS = (
+    ("root", "/"),
+    ("data", "/data"),
+    ("data_data", "/data/data"),
+    ("termux_app", "/data/data/com.termux"),
+    ("termux_files", "/data/data/com.termux/files"),
+    ("termux_usr", "/data/data/com.termux/files/usr"),
+    ("termux_bin", "/data/data/com.termux/files/usr/bin"),
+    ("home", "/data/data/com.termux/files/home"),
+    ("venv", "/data/data/com.termux/files/home/mcp-venv"),
+    ("venv_bin", "/data/data/com.termux/files/home/mcp-venv/bin"),
+    ("python_link", "/data/data/com.termux/files/home/mcp-venv/bin/python"),
+    ("python_target_link", "/data/data/com.termux/files/usr/bin/python"),
+    ("python_binary", "/data/data/com.termux/files/usr/bin/python3.13"),
+)
+_TERMUX_HOME = "/data/data/com.termux/files/home"
+_TERMUX_PREFIX = "/data/data/com.termux/files/usr"
+_SELINUX_CONTEXT_PATH = "/proc/self/attr/current"
 
 
 class WorkspaceError(RuntimeError):
@@ -41,7 +60,71 @@ class BoundedWorkspace:
                 "max_file_bytes": MAX_FILE_BYTES,
                 "allowed_operations": ["status", "list_files", "read_file",
                                        "write_file", "git_status", "git_diff",
-                                       "run_tests"]}
+                                       "run_tests", "diagnostics"]}
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Report fixed, read-only process and interpreter path metadata."""
+        executable = sys.executable
+        if executable == _TERMUX_HOME:
+            safe_executable = "~/"
+        elif executable.startswith(_TERMUX_HOME + os.sep):
+            safe_executable = "~/" + executable[len(_TERMUX_HOME + os.sep):]
+        elif executable == _TERMUX_PREFIX:
+            safe_executable = "$PREFIX"
+        elif executable.startswith(_TERMUX_PREFIX + os.sep):
+            prefix_length = len(_TERMUX_PREFIX + os.sep)
+            safe_executable = "$PREFIX/" + executable[prefix_length:]
+        else:
+            safe_executable = "<outside-known-roots>/" + Path(executable).name
+
+        try:
+            with open(_SELINUX_CONTEXT_PATH, encoding="utf-8") as context_file:
+                context = context_file.read(256).strip().replace("\x00", "")
+            selinux_context: dict[str, Any] = {"value": context}
+        except (OSError, UnicodeError) as exc:
+            selinux_context = self._diagnostic_error(exc)
+
+        paths: dict[str, Any] = {}
+        for label, path in _DIAGNOSTIC_PATHS:
+            entry: dict[str, Any] = {}
+            try:
+                info = os.stat(path)
+                entry["stat"] = {
+                    "mode": oct(S_IMODE(info.st_mode)),
+                    "uid": info.st_uid,
+                    "gid": info.st_gid,
+                    "is_directory": S_ISDIR(info.st_mode),
+                    "is_regular_file": S_ISREG(info.st_mode),
+                }
+            except OSError as exc:
+                entry["stat"] = self._diagnostic_error(exc)
+
+            try:
+                entry["access_x"] = os.access(
+                    path,
+                    os.X_OK,
+                    effective_ids=True,
+                )
+            except (OSError, NotImplementedError, TypeError) as exc:
+                entry["access_x"] = self._diagnostic_error(exc)
+            paths[label] = entry
+
+        return {
+            "uid": os.getuid(),
+            "euid": os.geteuid(),
+            "sys_executable": safe_executable,
+            "selinux_context": selinux_context,
+            "paths": paths,
+        }
+
+    @staticmethod
+    def _diagnostic_error(exc: BaseException) -> dict[str, Any]:
+        """Return error type and errno only; omit OS messages and path data."""
+        result: dict[str, Any] = {"error": type(exc).__name__}
+        errno = getattr(exc, "errno", None)
+        if isinstance(errno, int):
+            result["errno"] = errno
+        return result
 
     def _path(self, relative: str, *, must_exist: bool = False) -> Path:
         if not isinstance(relative, str) or not relative:
@@ -175,7 +258,11 @@ class BoundedWorkspace:
         except subprocess.TimeoutExpired:
             raise WorkspaceError(f"operation timed out after {self.timeout} seconds") from None
         except OSError as exc:
-            raise WorkspaceError(f"operation could not start: {type(exc).__name__}") from None
+            errno = getattr(exc, "errno", None)
+            errno_detail = errno if errno is not None else "unavailable"
+            raise WorkspaceError(
+                f"operation could not start: {type(exc).__name__}: {exc} (errno={errno_detail})"
+            ) from None
         output = completed.stdout[-MAX_OUTPUT_CHARS:]
         if completed.returncode:
             raise WorkspaceError(f"operation exited with status {completed.returncode}:\n{output}")
