@@ -1,6 +1,7 @@
 """Tests for the bounded Termux workspace operations."""
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 from dulwich import porcelain
 
-from authoritylab.termux_workspace_tools import BoundedWorkspace, WorkspaceError
+from authoritylab.termux_workspace_tools import BoundedWorkspace, MAX_FILE_BYTES, WorkspaceError
 
 
 class BoundedWorkspaceTests(unittest.TestCase):
@@ -75,6 +76,39 @@ class BoundedWorkspaceTests(unittest.TestCase):
         with self.assertRaises(WorkspaceError):
             self.workspace.write_file("link.txt", "changed")
         self.assertEqual(outside.read_text(encoding="utf-8"), "secret")
+
+    def test_write_rejects_invalid_unicode_without_creating_file(self):
+        with self.assertRaisesRegex(WorkspaceError, "valid UTF-8"):
+            self.workspace.write_file("invalid-unicode.txt", "\ud800")
+        self.assertFalse((self.root / "invalid-unicode.txt").exists())
+
+    def test_write_rejects_non_string_and_empty_paths(self):
+        for path in ("", None, 7):
+            with self.subTest(path=path), self.assertRaises(WorkspaceError):
+                self.workspace.write_file(path, "content")
+
+    def test_write_rejects_hard_link_without_modifying_external_target(self):
+        outside = self.root.parent / "outside-hardlink.txt"
+        outside.write_text("safe original", encoding="utf-8")
+        link = self.root / "hard-link.txt"
+        try:
+            os.link(outside, link)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"Hard-link creation is unavailable: {exc}")
+
+        with self.assertRaisesRegex(WorkspaceError, "hard-linked"):
+            self.workspace.write_file("hard-link.txt", "replacement")
+
+        self.assertEqual(outside.read_text(encoding="utf-8"), "safe original")
+        self.assertTrue(link.exists())
+
+    def test_write_replaces_file_atomically_and_keeps_content_bounded(self):
+        target = self.root / "replace-me.txt"
+        target.write_text("old", encoding="utf-8")
+        result = self.workspace.write_file("replace-me.txt", "new content")
+        self.assertEqual(result["path"], "replace-me.txt")
+        self.assertEqual(target.read_text(encoding="utf-8"), "new content")
+        self.assertLessEqual(target.stat().st_size, MAX_FILE_BYTES)
 
     def test_rejects_large_content(self):
         with self.assertRaises(WorkspaceError):
