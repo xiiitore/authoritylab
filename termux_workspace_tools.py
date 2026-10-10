@@ -96,7 +96,10 @@ class BoundedWorkspace:
         """Atomically replace one bounded regular file without following symlinks."""
         if not isinstance(content, str):
             raise WorkspaceError("content must be text")
-        encoded = content.encode("utf-8")
+        try:
+            encoded = content.encode("utf-8")
+        except UnicodeEncodeError:
+            raise WorkspaceError("content must be valid UTF-8 text") from None
         if len(encoded) > MAX_FILE_BYTES:
             raise WorkspaceError(f"content exceeds {MAX_FILE_BYTES} bytes")
         if not isinstance(path, str) or not path:
