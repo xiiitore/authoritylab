@@ -87,5 +87,35 @@ async def main() -> None:
                 raise AssertionError("rejected write created a file outside the workspace")
             print("PASS: parent-traversal read/write rejected")
 
+            outside = Path(temp) / "outside-link-target.txt"
+            outside.write_text(MARKER, encoding="utf-8")
+            os.symlink(outside, root / "symlink.txt")
+            symlink_read = await client.call_tool("read_file", {"path": "symlink.txt"})
+            symlink_write = await client.call_tool(
+                "write_file", {"path": "symlink.txt", "content": "should-not-write"}
+            )
+            if not symlink_read.is_error or not symlink_write.is_error:
+                raise AssertionError("symlink read/write was not rejected")
+            if outside.read_text(encoding="utf-8") != MARKER:
+                raise AssertionError("symlink operation changed the outside target")
+            print("PASS: symlink read/write rejected")
+
+            source = root / "hardlink-source.txt"
+            target = root / "hardlink-target.txt"
+            source.write_text(MARKER, encoding="utf-8")
+            try:
+                os.link(source, target)
+            except OSError as exc:
+                print(f"SKIP: filesystem does not permit hard links ({type(exc).__name__})")
+            else:
+                hardlink_write = await client.call_tool(
+                    "write_file", {"path": "hardlink-target.txt", "content": "should-not-write"}
+                )
+                if not hardlink_write.is_error:
+                    raise AssertionError("hard-linked target write was not rejected")
+                if source.read_text(encoding="utf-8") != MARKER:
+                    raise AssertionError("hard-link rejection changed the source file")
+                print("PASS: hard-linked target write rejected")
+
 if __name__ == "__main__":
     asyncio.run(main())
