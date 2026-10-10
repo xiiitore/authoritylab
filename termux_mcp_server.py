@@ -60,6 +60,11 @@ def main() -> None:
         """Run only unittest discovery; repository code is executed."""
         return workspace.run_tests()
 
+    @server.tool()
+    def diagnostics() -> dict:
+        """Return bounded process identity and interpreter metadata; no subprocesses."""
+        return workspace.diagnostics()
+
     server.run(transport="stdio")
 
 
