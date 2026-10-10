@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -109,13 +110,57 @@ class BoundedWorkspace:
         return {"path": target.relative_to(self.root).as_posix(), "bytes_written": len(encoded)}
 
     def git_status(self) -> str:
-        return self._run(["git", "status", "--short", "--branch"])
+        """Return a short Git-like status without spawning a Termux executable."""
+        from dulwich import porcelain
+
+        try:
+            branch = porcelain.active_branch(str(self.root)).decode("utf-8", "replace")
+        except (IndexError, KeyError, ValueError):
+            branch = "HEAD (detached)"
+        result = porcelain.status(str(self.root))
+        entries: dict[bytes, list[str]] = {}
+        staged_codes = {
+            "add": "A",
+            "modify": "M",
+            "delete": "D",
+            "rename": "R",
+            "copy": "C",
+        }
+        for kind, paths in result.staged.items():
+            code = staged_codes.get(str(kind), "M")
+            for path in paths:
+                key = path if isinstance(path, bytes) else os.fsencode(path)
+                entries.setdefault(key, [" ", " "])[0] = code
+        for path in result.unstaged:
+            key = path if isinstance(path, bytes) else os.fsencode(path)
+            target = self.root / os.fsdecode(key)
+            entries.setdefault(key, [" ", " "])[1] = " " if not target.exists() else "M"
+            if not target.exists():
+                entries[key][1] = "D"
+        for path in result.untracked:
+            key = path if isinstance(path, bytes) else os.fsencode(path)
+            entries[key] = ["?", "?"]
+
+        lines = [f"## {branch}"]
+        for path, codes in sorted(entries.items()):
+            lines.append(f"{codes[0]}{codes[1]} {os.fsdecode(path)}")
+        return "\n".join(lines) + "\n"
 
     def git_diff(self) -> str:
-        return self._run(["git", "diff", "--", "."])
+        """Return the unstaged diff using Dulwich instead of an external Git process."""
+        from dulwich.diff import diff_working_tree_to_index
+        from dulwich.repo import Repo
+
+        output = BytesIO()
+        repo = Repo(str(self.root))
+        try:
+            diff_working_tree_to_index(repo, output)
+        finally:
+            repo.close()
+        return output.getvalue().decode("utf-8", "replace")[-MAX_OUTPUT_CHARS:]
 
     def run_tests(self) -> dict[str, Any]:
-        """Run the fixed unittest discovery command; the caller supplies no command."""
+        """Run only unittest discovery; repository code is executed."""
         output = self._run([sys.executable, "-m", "unittest", "discover", "-v"])
         return {"command": "python -m unittest discover -v", "output": output}
 
