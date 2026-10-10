@@ -72,3 +72,8 @@ storage. Review diffs before committing or pushing.
 A stdio MCP server is local to its host process. Connecting it to ChatGPT from
 outside Termux requires a separate supported remote MCP endpoint or secure
 authenticated relay; do not expose a public unauthenticated HTTP listener.
+
+
+## Verification boundary
+
+The CI stdio smoke test verifies SDK compatibility and the local tool surface on the CI host. It does not establish a live connection from ChatGPT mobile to the Android device. Local stdio is consumed by its host process; a remote ChatGPT connection requires a separately reviewed, authenticated relay or supported remote MCP endpoint. See [the capability matrix](capability-matrix.md) for current evidence and remaining gates.
