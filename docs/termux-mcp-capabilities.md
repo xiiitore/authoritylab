@@ -24,6 +24,8 @@ repository you trust.
 
 The repository's MCP extra targets the MCP Python SDK v2 API (`mcp>=2.3,<3`). Keep the same major version in the Termux virtual environment and run the included stdio smoke check after installation.
 
+For the bounded workspace server (seven tools), the repository now includes `examples/check_termux_workspace_stdio.py`. It launches the server against a fresh temporary Git repository and checks the tool allowlist, status/list/read/write, git status/diff, test runner, parent-traversal rejection, symlink rejection, and hard-link write rejection where the filesystem supports hard links. It does not touch the user's actual checkout. The three-tool `check_termux_mcp_stdio.py` remains a separate read-only reference-server test.
+
 ## Install in Termux
 
 From the repository root, activate the existing virtual environment first.
