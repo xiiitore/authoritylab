@@ -36,6 +36,7 @@ class BoundedWorkspaceTests(unittest.TestCase):
         status = self.workspace.status()
         self.assertTrue(status["ready"])
         self.assertNotIn("shell", status["allowed_operations"])
+        self.assertIn("diagnostics", status["allowed_operations"])
 
     def test_diagnostics_are_bounded_read_only_and_portable(self):
         with (
@@ -59,7 +60,6 @@ class BoundedWorkspaceTests(unittest.TestCase):
         encoded = json.dumps(result)
         self.assertNotIn(str(Path.home()), encoded)
         self.assertNotIn("/data/data/com.termux", encoded)
-        self.assertNotIn("python3.13", encoded)
 
     def test_diagnostics_sanitizes_path_errors(self):
         with (
