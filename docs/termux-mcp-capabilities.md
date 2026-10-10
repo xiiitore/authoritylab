@@ -24,6 +24,28 @@ repository you trust.
 
 The repository's MCP extra targets the MCP Python SDK v2 API (`mcp>=2.3,<3`). Keep the same major version in the Termux virtual environment and run the included stdio smoke check after installation.
 
+## Fresh-checkout Termux verification
+
+These commands leave the existing `~/authoritylab` checkout untouched. Activate the virtual environment where you want to run the client; if it is not `~/mcp-venv`, substitute its actual path.
+
+```bash
+source "$HOME/mcp-venv/bin/activate" || exit 1
+AUDIT_DIR="$HOME/authoritylab-main-audit"
+if [ -e "$AUDIT_DIR" ]; then
+  echo "Audit path already exists; choose a new AUDIT_DIR."
+  exit 1
+fi
+git clone --branch main --single-branch https://github.com/xiiitore/authoritylab.git "$AUDIT_DIR" || exit 1
+SITE_DIR="$(mktemp -d "$HOME/authoritylab-main-site.XXXXXX")" || exit 1
+python -m pip install --target "$SITE_DIR" "$AUDIT_DIR[mcp,test]" || exit 1
+cd "$AUDIT_DIR" || exit 1
+PYTHONPATH="$SITE_DIR" python examples/check_termux_mcp_stdio.py || exit 1
+PYTHONPATH="$SITE_DIR" python examples/check_termux_workspace_stdio.py || exit 1
+PYTHONPATH="$SITE_DIR" python -m unittest discover -v
+```
+
+The first smoke test checks the three-tool read-only reference server. The second checks the separate seven-tool workspace server against a disposable Git repository, including bounded write/read and path/symlink/hard-link rejection. A hard-link `SKIP` means that filesystem did not permit the test; it is not a PASS. Keep the audit checkout and target directory until the output has been reviewed.
+
 For the bounded workspace server (seven tools), the repository now includes `examples/check_termux_workspace_stdio.py`. It launches the server against a fresh temporary Git repository and checks the tool allowlist, status/list/read/write, git status/diff, test runner, parent-traversal rejection, symlink rejection, and hard-link write rejection where the filesystem supports hard links. It does not touch the user's actual checkout. The three-tool `check_termux_mcp_stdio.py` remains a separate read-only reference-server test.
 
 ## Install in Termux
