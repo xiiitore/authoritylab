@@ -12,6 +12,9 @@ license = { text = "MIT" }
 authors = [{ name = "AuthorityLab contributors" }]
 dependencies = []
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.26,<3"]
+
 [tool.setuptools]
 packages = ["authoritylab"]
 package-dir = { "authoritylab" = "." }
