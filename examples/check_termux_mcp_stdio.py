@@ -15,8 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import Client, StdioServerParameters
 
 
 SERVER = Path(__file__).with_name("termux_mcp_server_authoritylab.py")
@@ -25,7 +24,9 @@ EXPECTED_TOOLS = {"status", "list_files", "read_file"}
 
 def _extract_string_list(result: object) -> list[str]:
     """Decode list_files output across common MCP SDK result encodings."""
-    structured = getattr(result, "structuredContent", None)
+    structured = getattr(result, "structured_content", None)
+    if structured is None:
+        structured = getattr(result, "structuredContent", None)
     if isinstance(structured, list) and all(isinstance(x, str) for x in structured):
         return structured
     if isinstance(structured, dict):
@@ -73,72 +74,71 @@ async def main() -> None:
             "AuthorityLab isolated read test\\n", encoding="utf-8"
         )
 
-        child_env = dict(os.environ)
-        child_env["AUTHORITYLAB_MCP_ROOT"] = str(share)
+        child_env = {"AUTHORITYLAB_MCP_ROOT": str(share)}
+        python_path = os.environ.get("PYTHONPATH")
+        if python_path:
+            child_env["PYTHONPATH"] = python_path
         params = StdioServerParameters(
             command=sys.executable,
             args=[str(SERVER)],
             env=child_env,
         )
 
-        async with stdio_client(params) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
+        async with Client(params) as session:
+            listed = await session.list_tools()
+            names = {tool.name for tool in listed.tools}
+            if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
+                raise AssertionError(f"Unexpected MCP tool surface: {sorted(names)!r}")
+            print("PASS: MCP initialize and exact three-tool allowlist")
 
-                listed = await session.list_tools()
-                names = {tool.name for tool in listed.tools}
-                if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
-                    raise AssertionError(f"Unexpected MCP tool surface: {sorted(names)!r}")
-                print("PASS: MCP initialize and exact three-tool allowlist")
-
-                status = await session.call_tool("status", {})
-                if status.is_error:
-                    raise AssertionError("status tool returned an MCP error")
-                print("PASS: status tool call over stdio")
-                status_data = getattr(status, "structuredContent", None)
-                if isinstance(status_data, dict):
-                    status_fields = status_data.get("result", status_data)
-                    if isinstance(status_fields, dict):
-                        print(
-                            "STATUS ROOT CHECK:",
-                            {
-                                "directory_exists": status_fields.get("directory_exists"),
-                                "directory_matches_fixture": (
-                                    status_fields.get("directory") == str(share)
-                                ),
-                            },
-                        )
-
-                listing = await session.call_tool("list_files", {})
-                if listing.is_error:
-                    raise AssertionError("list_files tool returned an MCP error")
-                print("PASS: list_files tool call over stdio")
-
-                listed_names = _extract_string_list(listing)
-                fixture_name = "authoritylab-smoke-test.txt"
-                if fixture_name not in listed_names:
-                    raw_content = [
-                        getattr(block, "text", None)
-                        for block in getattr(listing, "content", [])
-                    ]
-                    raise AssertionError(
-                        "Isolated fixture missing from list_files: "
-                        f"parsed={listed_names!r}, "
-                        f"structuredContent={getattr(listing, 'structuredContent', None)!r}, "
-                        f"content_text={raw_content!r}"
+            status = await session.call_tool("status", {})
+            if status.is_error:
+                raise AssertionError("status tool returned an MCP error")
+            print("PASS: status tool call over stdio")
+            status_data = getattr(status, "structured_content", None) or getattr(status, "structuredContent", None)
+            if isinstance(status_data, dict):
+                status_fields = status_data.get("result", status_data)
+                if isinstance(status_fields, dict):
+                    print(
+                        "STATUS ROOT CHECK:",
+                        {
+                            "directory_exists": status_fields.get("directory_exists"),
+                            "directory_matches_fixture": (
+                                status_fields.get("directory") == str(share)
+                            ),
+                        },
                     )
 
-                read_result = await session.call_tool("read_file", {"path": fixture_name})
-                if read_result.is_error:
-                    raise AssertionError("read_file failed on the isolated fixture")
-                print("PASS: read_file tool call over stdio (fixture content withheld)")
+            listing = await session.call_tool("list_files", {})
+            if listing.is_error:
+                raise AssertionError("list_files tool returned an MCP error")
+            print("PASS: list_files tool call over stdio")
 
-                rejected = await session.call_tool(
-                    "read_file", {"path": "../authoritylab-outside-root-check"}
+            listed_names = _extract_string_list(listing)
+            fixture_name = "authoritylab-smoke-test.txt"
+            if fixture_name not in listed_names:
+                raw_content = [
+                    getattr(block, "text", None)
+                    for block in getattr(listing, "content", [])
+                ]
+                raise AssertionError(
+                    "Isolated fixture missing from list_files: "
+                    f"parsed={listed_names!r}, "
+                    f"structuredContent={getattr(listing, 'structured_content', None) or getattr(listing, 'structuredContent', None)!r}, "
+                    f"content_text={raw_content!r}"
                 )
-                if not rejected.is_error:
-                    raise AssertionError("parent-traversal read was not rejected")
-                print("PASS: parent-traversal request rejected over stdio")
+
+            read_result = await session.call_tool("read_file", {"path": fixture_name})
+            if read_result.is_error:
+                raise AssertionError("read_file failed on the isolated fixture")
+            print("PASS: read_file tool call over stdio (fixture content withheld)")
+
+            rejected = await session.call_tool(
+                "read_file", {"path": "../authoritylab-outside-root-check"}
+            )
+            if not rejected.is_error:
+                raise AssertionError("parent-traversal read was not rejected")
+            print("PASS: parent-traversal request rejected over stdio")
 
 
 if __name__ == "__main__":
