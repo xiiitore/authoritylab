@@ -64,10 +64,20 @@ class BoundedWorkspaceTests(unittest.TestCase):
     def test_diagnostics_does_not_follow_arbitrary_prefix_environment(self):
         foreign_prefix = Path(self.temp.name) / "foreign-prefix"
         foreign_prefix.mkdir()
-        with patch.dict(os.environ, {"PREFIX": str(foreign_prefix)}):
+        with (
+            patch.dict(os.environ, {"PREFIX": str(foreign_prefix)}),
+            patch("authoritylab.termux_workspace_tools.os.stat", wraps=os.stat) as stat_call,
+            patch("authoritylab.termux_workspace_tools.os.access", wraps=os.access) as access_call,
+        ):
             result = self.workspace.diagnostics()
         self.assertNotIn("environment_prefix", result["paths"])
         self.assertNotIn("environment_prefix_bin", result["paths"])
+        inspected = [
+            Path(call.args[0])
+            for call in stat_call.call_args_list + access_call.call_args_list
+        ]
+        self.assertNotIn(foreign_prefix, inspected)
+        self.assertNotIn(foreign_prefix / "bin", inspected)
 
     def test_diagnostics_sanitizes_path_errors(self):
         with (
