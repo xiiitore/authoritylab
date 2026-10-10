@@ -1,6 +1,7 @@
 """Tests for the bounded Termux workspace operations."""
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 from dulwich import porcelain
 
-from authoritylab.termux_workspace_tools import BoundedWorkspace, WorkspaceError
+from authoritylab.termux_workspace_tools import BoundedWorkspace, MAX_FILE_BYTES, WorkspaceError
 
 
 class BoundedWorkspaceTests(unittest.TestCase):
