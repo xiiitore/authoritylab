@@ -77,6 +77,11 @@ class BoundedWorkspaceTests(unittest.TestCase):
             self.workspace.write_file("link.txt", "changed")
         self.assertEqual(outside.read_text(encoding="utf-8"), "secret")
 
+    def test_write_rejects_invalid_unicode_without_creating_file(self):
+        with self.assertRaisesRegex(WorkspaceError, "valid UTF-8"):
+            self.workspace.write_file("invalid-unicode.txt", "\ud800")
+        self.assertFalse((self.root / "invalid-unicode.txt").exists())
+
     def test_write_rejects_non_string_and_empty_paths(self):
         for path in ("", None, 7):
             with self.subTest(path=path), self.assertRaises(WorkspaceError):
