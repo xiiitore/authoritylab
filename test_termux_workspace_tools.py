@@ -76,6 +76,29 @@ class BoundedWorkspaceTests(unittest.TestCase):
             self.workspace.write_file("link.txt", "changed")
         self.assertEqual(outside.read_text(encoding="utf-8"), "secret")
 
+    def test_write_rejects_hard_link_without_modifying_external_target(self):
+        outside = self.root.parent / "outside-hardlink.txt"
+        outside.write_text("safe original", encoding="utf-8")
+        link = self.root / "hard-link.txt"
+        try:
+            os.link(outside, link)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"Hard-link creation is unavailable: {exc}")
+
+        with self.assertRaisesRegex(WorkspaceError, "hard-linked"):
+            self.workspace.write_file("hard-link.txt", "replacement")
+
+        self.assertEqual(outside.read_text(encoding="utf-8"), "safe original")
+        self.assertTrue(link.exists())
+
+    def test_write_replaces_file_atomically_and_keeps_content_bounded(self):
+        target = self.root / "replace-me.txt"
+        target.write_text("old", encoding="utf-8")
+        result = self.workspace.write_file("replace-me.txt", "new content")
+        self.assertEqual(result["path"], "replace-me.txt")
+        self.assertEqual(target.read_text(encoding="utf-8"), "new content")
+        self.assertLessEqual(target.stat().st_size, MAX_FILE_BYTES)
+
     def test_rejects_large_content(self):
         with self.assertRaises(WorkspaceError):
             self.workspace.write_file("large.txt", "x" * 200_001)
