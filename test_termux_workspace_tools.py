@@ -182,6 +182,48 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.assertNotIn("Traceback", message)
         self.assertNotIn("TOKEN_SENTINEL", message)
 
+    def test_run_tests_error_does_not_disclose_filename(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.subprocess.run",
+            side_effect=PermissionError(
+                13,
+                "permission denied",
+                "TOKEN_SENTINEL",
+            ),
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.run_tests()
+
+        message = str(raised.exception)
+        self.assertIn("PermissionError", message)
+        self.assertIn("permission denied", message)
+        self.assertIn("errno=13", message)
+        self.assertNotIn("TOKEN_SENTINEL", message)
+
+    def test_run_tests_error_message_is_bounded_and_keeps_errno(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.subprocess.run",
+            side_effect=PermissionError(13, "x" * 500),
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.run_tests()
+
+        message = str(raised.exception)
+        self.assertLessEqual(len(message), 200)
+        self.assertTrue(message.endswith("(errno=13)"))
+
+    def test_run_tests_error_uses_safe_fallback_without_strerror(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.subprocess.run",
+            side_effect=PermissionError(13, ""),
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.run_tests()
+
+        message = str(raised.exception)
+        self.assertIn("unknown OS error", message)
+        self.assertIn("errno=13", message)
+
     def test_diagnostics_has_fixed_scope_and_never_starts_subprocesses(self):
         files = "/data/data/com.termux/files"
         home = files + "/home"

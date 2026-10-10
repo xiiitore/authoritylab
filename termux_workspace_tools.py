@@ -260,9 +260,15 @@ class BoundedWorkspace:
         except OSError as exc:
             errno = getattr(exc, "errno", None)
             errno_detail = errno if errno is not None else "unavailable"
-            raise WorkspaceError(
-                f"operation could not start: {type(exc).__name__}: {exc} (errno={errno_detail})"
-            ) from None
+            strerror = getattr(exc, "strerror", None)
+            if not isinstance(strerror, str) or not strerror.strip():
+                strerror = "unknown OS error"
+            safe_detail = " ".join(strerror.split())
+            prefix = f"operation could not start: {type(exc).__name__}: "
+            suffix = f" (errno={errno_detail})"
+            detail_limit = max(0, 200 - len(prefix) - len(suffix))
+            message = prefix + safe_detail[:detail_limit] + suffix
+            raise WorkspaceError(message[:200]) from None
         output = completed.stdout[-MAX_OUTPUT_CHARS:]
         if completed.returncode:
             raise WorkspaceError(f"operation exited with status {completed.returncode}:\n{output}")
