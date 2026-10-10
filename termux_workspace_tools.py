@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import stat
+import secrets
 from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -91,23 +93,107 @@ class BoundedWorkspace:
             raise WorkspaceError(f"file could not be read: {type(exc).__name__}") from None
 
     def write_file(self, path: str, content: str) -> dict[str, Any]:
+        """Atomically replace one bounded regular file without following symlinks."""
         if not isinstance(content, str):
             raise WorkspaceError("content must be text")
         encoded = content.encode("utf-8")
         if len(encoded) > MAX_FILE_BYTES:
             raise WorkspaceError(f"content exceeds {MAX_FILE_BYTES} bytes")
-        target = self._path(path)
-        if target.exists() and not target.is_file():
-            raise WorkspaceError("target must be a regular file")
-        if target.exists() and target.stat().st_size > MAX_FILE_BYTES:
-            raise WorkspaceError("existing file exceeds the permitted size")
-        if not target.parent.is_dir():
-            raise WorkspaceError("parent directory must already exist")
+        if not isinstance(path, str) or not path or "\\x00" in path or "\\\\" in path:
+            raise WorkspaceError("path contains a forbidden character")
+        parsed = PurePosixPath(path)
+        if (parsed.is_absolute() or ".." in parsed.parts or ".git" in parsed.parts
+                or path in {".", "./"} or not parsed.parts):
+            raise WorkspaceError("path must name an allowed item inside the workspace")
+
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        directory = getattr(os, "O_DIRECTORY", None)
+        if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
+            raise WorkspaceError("platform lacks required safe relative-open features")
+
+        descriptors: list[int] = []
+        temporary_name: str | None = None
         try:
-            target.write_bytes(encoded)
-        except OSError as exc:
-            raise WorkspaceError(f"file could not be written: {type(exc).__name__}") from None
-        return {"path": target.relative_to(self.root).as_posix(), "bytes_written": len(encoded)}
+            descriptors.append(os.open(str(self.root), os.O_RDONLY | directory | nofollow))
+            for component in parsed.parts[:-1]:
+                descriptors.append(os.open(
+                    component, os.O_RDONLY | directory | nofollow,
+                    dir_fd=descriptors[-1],
+                ))
+            parent_fd = descriptors[-1]
+            final_name = parsed.parts[-1]
+
+            try:
+                existing = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                existing = None
+            except OSError:
+                raise WorkspaceError("target could not be inspected safely") from None
+
+            if existing is not None:
+                if not stat.S_ISREG(existing.st_mode):
+                    raise WorkspaceError("target must be a regular file and not a symlink")
+                if existing.st_nlink != 1:
+                    raise WorkspaceError("hard-linked targets are not permitted")
+                if existing.st_size > MAX_FILE_BYTES:
+                    raise WorkspaceError("existing file exceeds the permitted size")
+
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow
+            temporary_fd = -1
+            for _ in range(5):
+                temporary_name = ".authoritylab-write-" + secrets.token_hex(12) + ".tmp"
+                try:
+                    temporary_fd = os.open(
+                        temporary_name, flags, 0o600, dir_fd=parent_fd,
+                    )
+                    break
+                except FileExistsError:
+                    temporary_name = None
+            if temporary_fd < 0 or temporary_name is None:
+                raise WorkspaceError("could not allocate a safe temporary file")
+
+            try:
+                view = memoryview(encoded)
+                while view:
+                    written = os.write(temporary_fd, view)
+                    if written <= 0:
+                        raise WorkspaceError("temporary file write did not make progress")
+                    view = view[written:]
+                os.fsync(temporary_fd)
+            finally:
+                os.close(temporary_fd)
+
+            # Rename is descriptor-relative and atomic; a raced symlink/hardlink at
+            # the destination is replaced as a directory entry, never followed.
+            os.replace(
+                temporary_name, final_name,
+                src_dir_fd=parent_fd, dst_dir_fd=parent_fd,
+            )
+            temporary_name = None
+            try:
+                os.fsync(parent_fd)
+            except OSError:
+                # Some filesystems do not support directory fsync; the atomic
+                # replacement has already succeeded, so do not misreport failure.
+                pass
+            return {"path": parsed.as_posix(), "bytes_written": len(encoded)}
+        except WorkspaceError:
+            raise
+        except (OSError, TypeError, ValueError) as exc:
+            raise WorkspaceError(
+                f"file could not be written safely: {type(exc).__name__}"
+            ) from None
+        finally:
+            if temporary_name is not None and descriptors:
+                try:
+                    os.unlink(temporary_name, dir_fd=descriptors[-1])
+                except OSError:
+                    pass
+            for descriptor in reversed(descriptors):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
 
     def git_status(self) -> str:
         """Return a short Git-like status without spawning a Termux executable."""
