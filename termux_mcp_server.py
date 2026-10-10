@@ -11,12 +11,19 @@ from authoritylab.termux_workspace_tools import BoundedWorkspace
 
 def main() -> None:
     try:
-        from mcp.server.fastmcp import FastMCP
+        from mcp.server import MCPServer
     except ImportError:
         raise SystemExit("Install optional dependency with: pip install 'authoritylab[mcp]'") from None
 
     workspace = BoundedWorkspace(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd()))
-    server = FastMCP("authoritylab-termux")
+    server = MCPServer(
+        name="authoritylab-termux",
+        version="0.2.0",
+        instructions=(
+            "Restricted workspace bridge. Operate only inside the configured Git checkout. "
+            "Never execute arbitrary shell commands, access credentials, or access paths outside it."
+        ),
+    )
 
     @server.tool()
     def status() -> dict:
