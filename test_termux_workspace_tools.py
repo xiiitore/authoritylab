@@ -77,6 +77,11 @@ class BoundedWorkspaceTests(unittest.TestCase):
             self.workspace.write_file("link.txt", "changed")
         self.assertEqual(outside.read_text(encoding="utf-8"), "secret")
 
+    def test_write_rejects_non_string_and_empty_paths(self):
+        for path in ("", None, 7):
+            with self.subTest(path=path), self.assertRaises(WorkspaceError):
+                self.workspace.write_file(path, "content")
+
     def test_write_rejects_hard_link_without_modifying_external_target(self):
         outside = self.root.parent / "outside-hardlink.txt"
         outside.write_text("safe original", encoding="utf-8")
