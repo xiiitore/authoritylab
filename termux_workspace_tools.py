@@ -48,8 +48,9 @@ class BoundedWorkspace:
         if "\x00" in relative or "\\" in relative:
             raise WorkspaceError("path contains a forbidden character")
         parsed = PurePosixPath(relative)
-        if parsed.is_absolute() or ".." in parsed.parts or relative in {".", "./"}:
-            raise WorkspaceError("path must name an item inside the workspace")
+        if (parsed.is_absolute() or ".." in parsed.parts
+                or ".git" in parsed.parts or relative in {".", "./"}):
+            raise WorkspaceError("path must name an allowed item inside the workspace")
         target = self.root
         for part in parsed.parts:
             if part in {"", "."}:
