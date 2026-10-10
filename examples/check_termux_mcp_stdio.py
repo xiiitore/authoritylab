@@ -15,8 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import Client, StdioServerParameters
 
 
 SERVER = Path(__file__).with_name("termux_mcp_server_authoritylab.py")
@@ -25,7 +24,9 @@ EXPECTED_TOOLS = {"status", "list_files", "read_file"}
 
 def _extract_string_list(result: object) -> list[str]:
     """Decode list_files output across common MCP SDK result encodings."""
-    structured = getattr(result, "structuredContent", None)
+    structured = getattr(result, "structured_content", None)
+    if structured is None:
+        structured = getattr(result, "structuredContent", None)
     if isinstance(structured, list) and all(isinstance(x, str) for x in structured):
         return structured
     if isinstance(structured, dict):
@@ -73,18 +74,17 @@ async def main() -> None:
             "AuthorityLab isolated read test\\n", encoding="utf-8"
         )
 
-        child_env = dict(os.environ)
-        child_env["AUTHORITYLAB_MCP_ROOT"] = str(share)
+        child_env = {"AUTHORITYLAB_MCP_ROOT": str(share)}
+        python_path = os.environ.get("PYTHONPATH")
+        if python_path:
+            child_env["PYTHONPATH"] = python_path
         params = StdioServerParameters(
             command=sys.executable,
             args=[str(SERVER)],
             env=child_env,
         )
 
-        async with stdio_client(params) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-
+        async with Client(params) as session:
                 listed = await session.list_tools()
                 names = {tool.name for tool in listed.tools}
                 if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
@@ -95,7 +95,7 @@ async def main() -> None:
                 if status.is_error:
                     raise AssertionError("status tool returned an MCP error")
                 print("PASS: status tool call over stdio")
-                status_data = getattr(status, "structuredContent", None)
+                status_data = getattr(status, "structured_content", None) or getattr(status, "structuredContent", None)
                 if isinstance(status_data, dict):
                     status_fields = status_data.get("result", status_data)
                     if isinstance(status_fields, dict):
@@ -124,7 +124,7 @@ async def main() -> None:
                     raise AssertionError(
                         "Isolated fixture missing from list_files: "
                         f"parsed={listed_names!r}, "
-                        f"structuredContent={getattr(listing, 'structuredContent', None)!r}, "
+                        f"structuredContent={getattr(listing, 'structured_content', None) or getattr(listing, 'structuredContent', None)!r}, "
                         f"content_text={raw_content!r}"
                     )
 
