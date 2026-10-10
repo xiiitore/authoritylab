@@ -32,3 +32,4 @@ jobs:
         run: |
           python -m unittest -v test_workflow
           pytest -q
+          python examples/check_termux_mcp_stdio.py
