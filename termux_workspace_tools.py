@@ -127,16 +127,15 @@ class BoundedWorkspace:
             "copy": "C",
         }
         for kind, paths in result.staged.items():
-            code = staged_codes.get(str(kind), "M")
+            normalized_kind = kind.decode("utf-8", "replace") if isinstance(kind, bytes) else str(kind)
+            code = staged_codes.get(normalized_kind, "M")
             for path in paths:
                 key = path if isinstance(path, bytes) else os.fsencode(path)
                 entries.setdefault(key, [" ", " "])[0] = code
         for path in result.unstaged:
             key = path if isinstance(path, bytes) else os.fsencode(path)
             target = self.root / os.fsdecode(key)
-            entries.setdefault(key, [" ", " "])[1] = " " if not target.exists() else "M"
-            if not target.exists():
-                entries[key][1] = "D"
+            entries.setdefault(key, [" ", " "])[1] = "M" if target.exists() else "D"
         for path in result.untracked:
             key = path if isinstance(path, bytes) else os.fsencode(path)
             entries[key] = ["?", "?"]
