@@ -16,7 +16,7 @@ from mcp import Client, StdioServerParameters
 
 EXPECTED_TOOLS = {
     "status", "list_files", "read_file", "write_file",
-    "git_status", "git_diff", "run_tests",
+    "git_status", "git_diff", "run_tests", "diagnostics",
 }
 MARKER = "authoritylab-safe-write-check"
 
@@ -53,7 +53,7 @@ async def main() -> None:
             names = {tool.name for tool in listed.tools}
             if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
                 raise AssertionError(f"Unexpected workspace MCP tools: {sorted(names)!r}")
-            print("PASS: workspace server exposes exactly seven allow-listed tools")
+            print("PASS: workspace server exposes exactly eight allow-listed tools")
 
             for name, arguments in (
                 ("status", {}),
@@ -61,6 +61,7 @@ async def main() -> None:
                 ("git_status", {}),
                 ("git_diff", {}),
                 ("run_tests", {}),
+                ("diagnostics", {}),
             ):
                 result = await client.call_tool(name, arguments)
                 if result.is_error:
