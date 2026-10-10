@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from dulwich import porcelain
+
 from authoritylab.termux_workspace_tools import BoundedWorkspace, WorkspaceError
 
 
@@ -13,8 +15,15 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "repo"
         self.root.mkdir()
-        (self.root / ".git").mkdir()
-        (self.root / "README.md").write_text("hello", encoding="utf-8")
+        porcelain.init(str(self.root))
+        (self.root / "README.md").write_text("hello\n", encoding="utf-8")
+        porcelain.add(str(self.root), paths=["README.md"])
+        porcelain.commit(
+            str(self.root),
+            message=b"initial",
+            author=b"Test User <test@example.com>",
+            committer=b"Test User <test@example.com>",
+        )
         self.workspace = BoundedWorkspace(self.root)
 
     def tearDown(self):
@@ -35,7 +44,7 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.assertNotIn("link.txt", entries)
 
     def test_read_and_write_inside_workspace(self):
-        self.assertEqual(self.workspace.read_file("README.md"), "hello")
+        self.assertEqual(self.workspace.read_file("README.md"), "hello\n")
         self.workspace.write_file("new.txt", "world")
         self.assertEqual((self.root / "new.txt").read_text(encoding="utf-8"), "world")
 
@@ -79,6 +88,36 @@ class BoundedWorkspaceTests(unittest.TestCase):
     def test_rejects_directory_as_write_target(self):
         with self.assertRaises(WorkspaceError):
             self.workspace.write_file(".git", "not a directory")
+
+    def test_git_status_reports_clean_branch_without_subprocess(self):
+        status = self.workspace.git_status()
+        self.assertTrue(status.startswith("## "))
+        self.assertNotIn("?? ", status)
+        self.assertNotIn(" M ", status)
+
+    def test_git_status_reports_untracked_and_staged_changes(self):
+        (self.root / "untracked.txt").write_text("new", encoding="utf-8")
+        (self.root / "staged.txt").write_text("staged", encoding="utf-8")
+        porcelain.add(str(self.root), paths=["staged.txt"])
+
+        status = self.workspace.git_status()
+        self.assertIn("?? untracked.txt", status)
+        self.assertIn("A  staged.txt", status)
+
+    def test_git_status_reports_unstaged_changes(self):
+        (self.root / "README.md").write_text("changed\n", encoding="utf-8")
+        status = self.workspace.git_status()
+        self.assertIn(" M README.md", status)
+
+    def test_git_diff_returns_unstaged_patch_without_subprocess(self):
+        (self.root / "README.md").write_text("changed\n", encoding="utf-8")
+        diff = self.workspace.git_diff()
+        self.assertIn("README.md", diff)
+        self.assertIn("-hello", diff)
+        self.assertIn("+changed", diff)
+
+    def test_git_diff_is_empty_for_clean_tree(self):
+        self.assertEqual(self.workspace.git_diff(), "")
 
 
 if __name__ == "__main__":
