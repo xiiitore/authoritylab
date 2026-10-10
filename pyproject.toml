@@ -13,7 +13,7 @@ authors = [{ name = "AuthorityLab contributors" }]
 dependencies = []
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.26,<3"]
+mcp = ["mcp>=1.26,<2", "dulwich>=0.22,<1"]
 
 [tool.setuptools]
 packages = ["authoritylab"]
