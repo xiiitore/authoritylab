@@ -13,10 +13,10 @@ This matrix distinguishes registered interfaces from capabilities that have actu
 | GitHub repository inspection and branch writes | PASS | Read-back verified for new files, branches, CI, and pull requests. PR #29, #30, and #32 are merged to main; superseded PR #31 is closed. |
 | Capability Registry integrity | PASS | Python CI on checked commit 9cc2142 passed for Python 3.11, 3.12, and 3.13; registry JSON Schema validation, compile, blocking lint, Docker integration, and CodeQL passed. |
 | Workspace atomic write hardening | PASS / PLATFORM UNKNOWN | Merged via PR #30 at commit f81ddf7. Python CI, Docker integration, and CodeQL passed on head 19e3c77, including invalid-Unicode rejection. Actual Android/Termux filesystem behavior and hard-link behavior remain untested on-device. |
-| MCP SDK v2 stdio bridge | PASS / PLATFORM UNKNOWN | Merged via PR #32 at commit 6ece6d4. Python CI passed on Python 3.11–3.13, Docker integration passed, and CodeQL is being checked post-merge. The stdio smoke test verifies the separate read-only reference server's three-tool surface on Linux; it does not test the Android device or the seven-tool workspace server. |
+| MCP SDK v2 stdio bridge | PASS / PLATFORM UNKNOWN | Merged via PR #32 at commit 6ece6d4. Latest checked main commit 7a807f1 passed Python CI on Python 3.11–3.13, Docker integration, and CodeQL. CI now tests both the three-tool read-only reference server and the seven-tool workspace server, including bounded write/read, parent-traversal rejection, symlink rejection, and hard-link write rejection on Linux. Actual Android/Termux behavior remains unverified. |
 | Direct ChatGPT mobile access to a local stdio server | BLOCKED BY TRANSPORT MODEL | A local stdio MCP process serves its local host process. Direct ChatGPT access requires a supported remote MCP endpoint or authenticated relay; neither is deployed by these changes. |
 | Termux device runtime | UNKNOWN | No registered Codex remote environment was returned and no direct execution channel to the phone is available in this session. A local smoke check on the device is still required. |
-| OVERALGORITHM plugin release | PARTIAL | Current release remains 1.2.12. Twelve static schema/contract checks passed. The full current schema test suite (21 tests) has not been executed against a runnable copy of the current archive; no candidate release was published. |
+| OVERALGORITHM plugin release | PARTIAL | Current release remains 1.2.12. All 21 release-decision schema tests passed on the current schema files across Python 3.11–3.13. The 51-test combined audit initially exposed stale release-gate contract expectations; an isolated candidate copy corrected the version assertion and made the runtime-policy evidence wording explicit, then all 51 tests passed across Python 3.11–3.13 in private draft PR #3. The actual plugin remains 1.2.12; candidate 1.2.13 has not been published or read back as a release. |
 | Hosting/deployment capability | AVAILABLE, NOT VERIFIED HERE | DigitalOcean and Render interfaces are registered. No remote bridge or public endpoint has been deployed in this workflow. |
 | Automation capability | AVAILABLE, NOT VERIFIED HERE | Automation interfaces are registered. No recurring job was created as part of this task. |
 
@@ -26,6 +26,7 @@ This matrix distinguishes registered interfaces from capabilities that have actu
 2. [#30 — Harden workspace writes with descriptor-relative atomic replacement](https://github.com/xiiitore/authoritylab/pull/30) — merged as `f81ddf7`.
 3. [#31 — Align Termux MCP bridge and smoke test with SDK v2](https://github.com/xiiitore/authoritylab/pull/31) — closed without merge because its base was superseded.
 4. [#32 — Align Termux MCP bridge and smoke test with SDK v2](https://github.com/xiiitore/authoritylab/pull/32) — merged as `6ece6d4` from a clean branch based on updated main.
+5. [Private audit PR #3 — OVERALGORITHM v1.2.12 schema/contract tests](https://github.com/xiiitore/authority-boundary-lab/pull/3) — draft only, private repo; 51 tests passed on the candidate audit snapshot, not a plugin release.
 
 ## Next gates
 
