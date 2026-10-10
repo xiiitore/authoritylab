@@ -44,6 +44,18 @@ class BoundedWorkspaceTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(WorkspaceError):
                 self.workspace.read_file(path)
 
+    def test_rejects_git_metadata_reads_and_writes(self):
+        (self.root / ".git" / "config").write_text("[remote]", encoding="utf-8")
+        for path in (".git/config", ".git/hooks/pre-commit", "nested/.git/config"):
+            with self.subTest(path=path), self.assertRaises(WorkspaceError):
+                self.workspace.read_file(path)
+            with self.subTest(path=path), self.assertRaises(WorkspaceError):
+                self.workspace.write_file(path, "changed")
+        self.assertEqual(
+            (self.root / ".git" / "config").read_text(encoding="utf-8"),
+            "[remote]",
+        )
+
     def test_rejects_symlink_reads_and_writes(self):
         outside = Path(self.temp.name) / "outside.txt"
         outside.write_text("secret", encoding="utf-8")
