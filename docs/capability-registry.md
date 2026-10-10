@@ -85,3 +85,7 @@ This is an inventory, not proof that listed interfaces are callable, authorized,
 ## Provenance
 
 Generated from current session tool metadata on 2026-10-11. Counts vary by session/account and do not prove runtime success. Repository facts came from live GitHub metadata plus README.md, pyproject.toml, and architecture.md. Plugin version came from Plugin Creator metadata.
+
+## Related capability matrix
+
+See [capability-matrix.md](capability-matrix.md) for task-level status, verification evidence, and remaining execution gates.
