@@ -99,7 +99,7 @@ class BoundedWorkspace:
         encoded = content.encode("utf-8")
         if len(encoded) > MAX_FILE_BYTES:
             raise WorkspaceError(f"content exceeds {MAX_FILE_BYTES} bytes")
-        if not isinstance(path, str) or not path or "\\x00" in path or "\\\\" in path:
+        if "\x00" in path or "\\" in path:
             raise WorkspaceError("path contains a forbidden character")
         parsed = PurePosixPath(path)
         if (parsed.is_absolute() or ".." in parsed.parts or ".git" in parsed.parts
