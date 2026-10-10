@@ -20,6 +20,10 @@ push, Git commit, credential access, or access to paths outside the configured
 repository. The test runner executes code from the checkout; only use it with a
 repository you trust.
 
+## SDK compatibility
+
+The repository's MCP extra targets the MCP Python SDK v2 API (`mcp>=2.3,<3`). Keep the same major version in the Termux virtual environment and run the included stdio smoke check after installation.
+
 ## Install in Termux
 
 From the repository root, activate the existing virtual environment first.
