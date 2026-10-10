@@ -175,7 +175,17 @@ class BoundedWorkspace:
         except subprocess.TimeoutExpired:
             raise WorkspaceError(f"operation timed out after {self.timeout} seconds") from None
         except OSError as exc:
-            raise WorkspaceError(f"operation could not start: {type(exc).__name__}") from None
+            errno = getattr(exc, "errno", None)
+            errno_detail = errno if errno is not None else "unavailable"
+            # Avoid str(exc): OSError may append a sensitive filename/path.
+            reason = getattr(exc, "strerror", None)
+            if not isinstance(reason, str) or not reason:
+                reason = "unavailable"
+            reason = reason[:200]
+            raise WorkspaceError(
+                f"operation could not start: {type(exc).__name__}: "
+                f"{reason} (errno={errno_detail})"
+            ) from None
         output = completed.stdout[-MAX_OUTPUT_CHARS:]
         if completed.returncode:
             raise WorkspaceError(f"operation exited with status {completed.returncode}:\n{output}")
