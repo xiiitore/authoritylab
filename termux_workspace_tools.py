@@ -56,13 +56,6 @@ class BoundedWorkspace:
             ("python_base_prefix", Path(sys.base_prefix)),
             ("python_base_prefix_bin", Path(sys.base_prefix) / "bin"),
         ]
-        termux_prefix = os.environ.get("PREFIX")
-        if termux_prefix:
-            candidates.extend([
-                ("environment_prefix", Path(termux_prefix)),
-                ("environment_prefix_bin", Path(termux_prefix) / "bin"),
-            ])
-
         paths: dict[str, Any] = {}
         seen: set[str] = set()
         for label, candidate in candidates:
