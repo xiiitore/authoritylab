@@ -4,6 +4,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dulwich import porcelain
 
@@ -118,6 +119,22 @@ class BoundedWorkspaceTests(unittest.TestCase):
 
     def test_git_diff_is_empty_for_clean_tree(self):
         self.assertEqual(self.workspace.git_diff(), "")
+
+    def test_run_tests_reports_os_error_without_exposing_filename(self):
+        error = PermissionError(13, "permission denied", "TOKEN_SENTINEL")
+        with patch(
+            "authoritylab.termux_workspace_tools.subprocess.run",
+            side_effect=error,
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.run_tests()
+
+        message = str(raised.exception)
+        self.assertIn("operation could not start: PermissionError", message)
+        self.assertIn("permission denied", message)
+        self.assertIn("errno=13", message)
+        self.assertNotIn("TOKEN_SENTINEL", message)
+        self.assertNotIn("Traceback", message)
 
 
 if __name__ == "__main__":
