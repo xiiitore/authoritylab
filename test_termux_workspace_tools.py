@@ -1,6 +1,7 @@
 """Tests for the bounded Termux workspace operations."""
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -35,6 +36,45 @@ class BoundedWorkspaceTests(unittest.TestCase):
         status = self.workspace.status()
         self.assertTrue(status["ready"])
         self.assertNotIn("shell", status["allowed_operations"])
+
+    def test_diagnostics_are_bounded_read_only_and_portable(self):
+        with (
+            patch("authoritylab.termux_workspace_tools.subprocess.run",
+                  side_effect=AssertionError("diagnostics must not spawn subprocesses")),
+            patch("authoritylab.termux_workspace_tools.os.stat",
+                  wraps=os.stat) as stat_call,
+            patch("authoritylab.termux_workspace_tools.os.access",
+                  wraps=os.access) as access_call,
+        ):
+            result = self.workspace.diagnostics()
+
+        self.assertEqual(result["uid"], os.getuid())
+        self.assertEqual(result["euid"], os.geteuid())
+        self.assertIn("python_version", result)
+        self.assertIn("python_implementation", result)
+        self.assertIn("selinux_context", result)
+        self.assertTrue(result["paths"])
+        self.assertTrue(stat_call.call_count >= len(result["paths"]))
+        self.assertTrue(access_call.call_count >= len(result["paths"]))
+        encoded = json.dumps(result)
+        self.assertNotIn(str(Path.home()), encoded)
+        self.assertNotIn("/data/data/com.termux", encoded)
+        self.assertNotIn("python3.13", encoded)
+
+    def test_diagnostics_sanitizes_path_errors(self):
+        with (
+            patch("authoritylab.termux_workspace_tools.os.stat",
+                  side_effect=PermissionError(13, "private TOKEN_SENTINEL")),
+            patch("authoritylab.termux_workspace_tools.os.access",
+                  side_effect=PermissionError(13, "private TOKEN_SENTINEL")),
+            patch("builtins.open",
+                  side_effect=PermissionError(13, "private TOKEN_SENTINEL")),
+        ):
+            result = self.workspace.diagnostics()
+        encoded = json.dumps(result)
+        self.assertNotIn("TOKEN_SENTINEL", encoded)
+        self.assertNotIn("private", encoded)
+        self.assertEqual(result["selinux_context"]["error"], "PermissionError")
 
     def test_list_skips_git_and_symlinks(self):
         outside = Path(self.temp.name) / "outside.txt"
