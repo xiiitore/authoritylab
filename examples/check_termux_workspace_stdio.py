@@ -33,8 +33,8 @@ async def main() -> None:
         )
 
         (root / "test_smoke.py").write_text(
-            "import unittest\\n\\nclass WorkspaceSmoke(unittest.TestCase):\\n"
-            "    def test_fixture(self):\\n        self.assertTrue(True)\\n",
+            "import unittest\n\nclass WorkspaceSmoke(unittest.TestCase):\n"
+            "    def test_fixture(self):\n        self.assertTrue(True)\n",
             encoding="utf-8",
         )
 
