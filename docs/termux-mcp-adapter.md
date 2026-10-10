@@ -79,7 +79,7 @@ if [ -e "$AUDIT_DIR" ]; then
   echo "Audit path already exists; choose a new AUDIT_DIR."
   exit 1
 fi
-git clone --branch feature/termux-mcp-readonly-adapter --single-branch \
+git clone --branch main --single-branch \
   https://github.com/xiiitore/authoritylab.git "$AUDIT_DIR"
 SITE_DIR="$(mktemp -d "$HOME/authoritylab-termux-site.XXXXXX")"
 python -m pip install --target "$SITE_DIR" "$AUDIT_DIR"
@@ -99,7 +99,7 @@ stdio-level MCP check and the actual hard-link filesystem check:
 
 ```bash
 cd "$HOME/authoritylab-termux-audit" || exit 1
-git pull --ff-only origin feature/termux-mcp-readonly-adapter || exit 1
+git pull --ff-only origin main || exit 1
 SITE_DIR="$(mktemp -d "$HOME/authoritylab-termux-site-check.XXXXXX")" || exit 1
 python -m pip install --no-deps --target "$SITE_DIR" "$HOME/authoritylab-termux-audit" || exit 1
 
