@@ -95,7 +95,7 @@ class BoundedWorkspace:
 
         try:
             with open("/proc/self/attr/current", encoding="utf-8") as context_file:
-                context = context_file.read(256).strip().replace("\\x00", "")
+                context = context_file.read(256).strip().replace("\x00", "")
             selinux_context: dict[str, Any] = {"value": context}
         except (OSError, UnicodeError) as exc:
             selinux_context = self._diagnostic_error(exc)
