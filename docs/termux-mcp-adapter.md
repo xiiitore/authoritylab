@@ -5,6 +5,10 @@ already-restricted Termux MCP operations: `status`, `list_files`, and
 `read_file`. It does not create a server and does not itself limit filesystem
 access; the supplied functions must retain their own path and file-size checks.
 
+## SDK compatibility
+
+The reference server and stdio smoke test use the MCP Python SDK v2 API. Install the project's optional dependency extra, which pins the v2 major line; do not run the v2 example against an MCP v1 environment.
+
 ## Integration pattern
 
 A complete reference server is provided at
