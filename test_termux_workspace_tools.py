@@ -61,6 +61,14 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.assertNotIn(str(Path.home()), encoded)
         self.assertNotIn("/data/data/com.termux", encoded)
 
+    def test_diagnostics_does_not_follow_arbitrary_prefix_environment(self):
+        foreign_prefix = Path(self.temp.name) / "foreign-prefix"
+        foreign_prefix.mkdir()
+        with patch.dict(os.environ, {"PREFIX": str(foreign_prefix)}):
+            result = self.workspace.diagnostics()
+        self.assertNotIn("environment_prefix", result["paths"])
+        self.assertNotIn("environment_prefix_bin", result["paths"])
+
     def test_diagnostics_sanitizes_path_errors(self):
         with (
             patch("authoritylab.termux_workspace_tools.os.stat",
