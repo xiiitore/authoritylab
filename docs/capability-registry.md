@@ -52,13 +52,13 @@ This is an inventory, not proof that listed interfaces are callable, authorized,
 - README describes AuthorityLab as a reference implementation, not a production-grade governance/security system.
 - README says the project itself has no external plugin integrations, authentication, web API, or distributed execution.
 - README explicitly states the subprocess runner is not a security sandbox; Docker assurance depends on host/runtime/image trust.
-- pyproject.toml declares optional MCP dependencies mcp>=1.26,<2 and dulwich>=0.22,<1. Previously reported Termux install was MCP 2.3.0; compatibility is unresolved and must be tested.
+- pyproject.toml declares optional MCP dependencies mcp>=1.26,<2 and dulwich>=0.22,<1 in the original inventory. PR #31 upgrades the optional MCP dependency to >=2.3,<3 and adds an SDK v2 stdio smoke test; CI and on-device Termux verification must both pass.
 - Codex Tasks returned no registered remote environments in this run; this does not prove Termux is unreachable through every possible method.
 - overalgorithm-engine current version is 1.2.12. Full current schema tests have not run in this environment; do not publish a candidate based only on static checks.
 
 ## Priority gaps
 
-1. **MCP dependency compatibility:** resolve the repository's mcp<2 constraint against the Termux install of 2.3.0; pin intentionally and test.
+1. **MCP dependency compatibility:** PR #31 pins the supported SDK major range to >=2.3,<3; re-run CI on main and verify on the actual Termux installation.
 2. **Tool verification:** add positive, negative, permission-denied, timeout, malformed-output, and regression tests. A provider is not verified by one successful call.
 3. **Termux bridge:** allow-listed operations only, not arbitrary shell execution; default read-only; canonical path checks; timeouts/output caps; no inherited secrets; structured audit logs; explicit gates for mutation.
 4. **Reproducible tests:** clean checkout/install test; align README commands with CI; preserve backup/quarantine files unless reviewed.
@@ -85,3 +85,11 @@ This is an inventory, not proof that listed interfaces are callable, authorized,
 ## Provenance
 
 Generated from current session tool metadata on 2026-10-11. Counts vary by session/account and do not prove runtime success. Repository facts came from live GitHub metadata plus README.md, pyproject.toml, and architecture.md. Plugin version came from Plugin Creator metadata.
+
+## Related capability matrix
+
+See [capability-matrix.md](capability-matrix.md) for task-level status, verification evidence, and remaining execution gates.
+
+## Related capability matrix
+
+See [capability-matrix.md](capability-matrix.md) for task-level status, verification evidence, and remaining execution gates.
