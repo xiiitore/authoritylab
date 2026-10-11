@@ -23,8 +23,9 @@ from authoritylab.termux_mcp_adapter import (
 
 
 def build_server() -> Server:
-    root = Path(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd())).resolve()
-    workspace = BoundedWorkspace(str(root))
+    configured_root = Path(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd())).expanduser()
+    workspace = BoundedWorkspace(configured_root)
+    root = workspace.root
     registry = ToolRegistry()
 
     register_read_only_mcp_tools(
@@ -45,7 +46,7 @@ def build_server() -> Server:
     core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
     server = Server(
         "authoritylab-termux",
-        version="0.2.3",
+        version="0.2.4",
         instructions="Read-only workspace bridge. Only status, list_files, and read_file are exposed.",
     )
 
