@@ -1,66 +1,90 @@
-"""Local stdio MCP server exposing bounded AuthorityLab workspace operations.
-
-It does not open a network listener or expose a generic shell.
-"""
+"""Read-only MCP stdio bridge governed by AuthorityLab WorkflowCore."""
 from __future__ import annotations
 
+import json
 import os
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
+from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+
+from authoritylab.core import WorkflowCore
+from authoritylab.tools import ToolRegistry
 from authoritylab.termux_workspace_tools import BoundedWorkspace
+from authoritylab.termux_mcp_adapter import (
+    MCPAdapterError,
+    dispatch_read_only_mcp_tool,
+    read_only_mcp_governance_policy,
+    register_read_only_mcp_tools,
+)
 
 
-def main() -> None:
-    try:
-        from mcp.server import MCPServer
-    except ImportError:
-        raise SystemExit("Install optional dependency with: pip install 'authoritylab[mcp]'") from None
+def build_server() -> MCPServer:
+    configured_root = Path(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd())).expanduser()
+    workspace = BoundedWorkspace(configured_root)
+    root = workspace.root
+    registry = ToolRegistry()
 
-    workspace = BoundedWorkspace(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd()))
+    register_read_only_mcp_tools(
+        registry,
+        status=lambda: {
+            "status": "ready" if workspace.status().get("ready") is True else "not_ready",
+            "directory_exists": root.is_dir(),
+            "directory": str(root),
+            "max_file_bytes": workspace.status().get("max_file_bytes"),
+        },
+        list_files=lambda: [
+            name
+            for name in workspace.list_files(".")
+            if not name.endswith("/")
+        ][:100],
+        read_file=lambda path: workspace.read_file(path),
+    )
+    core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
     server = MCPServer(
         name="authoritylab-termux",
-        version="0.2.0",
-        instructions=(
-            "Restricted workspace bridge. Operate only inside the configured Git checkout. "
-            "Never execute arbitrary shell commands, access credentials, or access paths outside it."
-        ),
+        version="0.2.5",
+        instructions="Read-only workspace bridge. Only status, list_files, and read_file are exposed.",
     )
 
-    @server.tool()
-    def status() -> dict:
-        """Return the workspace root, limits, and fixed allowlist."""
-        return workspace.status()
+    def audit_report(event: Mapping[str, Any]) -> None:
+        """Write metadata-only workflow records to stderr, never file contents."""
+        print(json.dumps(dict(event), sort_keys=True), file=sys.stderr, flush=True)
+
+    def dispatch(kind: str, payload: dict[str, Any]) -> Any:
+        try:
+            return dispatch_read_only_mcp_tool(
+                core,
+                kind=kind,
+                payload=payload,
+                audit_sink=audit_report,
+            )
+        except MCPAdapterError as exc:
+            raise ToolError(str(exc)) from None
 
     @server.tool()
-    def list_files(directory: str = ".") -> list[str]:
-        """List up to 200 direct entries in a repository directory."""
-        return workspace.list_files(directory)
+    def status() -> dict[str, Any]:
+        """Return bounded workspace status."""
+        return dispatch("status", {})
+
+    @server.tool()
+    def list_files() -> list[str]:
+        """List direct file names in the workspace root."""
+        return dispatch("list_files", {})
 
     @server.tool()
     def read_file(path: str) -> str:
-        """Read a UTF-8 file inside the repository, capped at 200 KB."""
-        return workspace.read_file(path)
+        """Read a UTF-8 file by relative path."""
+        return dispatch("read_file", {"path": path})
 
-    @server.tool()
-    def write_file(path: str, content: str) -> dict:
-        """Write up to 200 KB to a file inside the repository."""
-        return workspace.write_file(path, content)
+    return server
 
-    @server.tool()
-    def git_status() -> str:
-        """Return git status without modifying the repository."""
-        return workspace.git_status()
 
-    @server.tool()
-    def git_diff() -> str:
-        """Return the unstaged diff without modifying the repository."""
-        return workspace.git_diff()
-
-    @server.tool()
-    def run_tests() -> dict:
-        """Run only unittest discovery; repository code is executed."""
-        return workspace.run_tests()
-
-    server.run(transport="stdio")
+def main() -> None:
+    build_server().run(transport="stdio")
 
 
 if __name__ == "__main__":

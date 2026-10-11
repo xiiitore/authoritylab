@@ -43,7 +43,74 @@ class BoundedWorkspace:
                 "max_file_bytes": MAX_FILE_BYTES,
                 "allowed_operations": ["status", "list_files", "read_file",
                                        "write_file", "git_status", "git_diff",
-                                       "run_tests"]}
+                                       "run_tests", "diagnostics"]}
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return bounded, read-only process diagnostics without exposing full paths."""
+        candidates: list[tuple[str, Path]] = [
+            ("home", Path.home()),
+            ("python_executable", Path(sys.executable)),
+            ("python_executable_parent", Path(sys.executable).parent),
+            ("python_prefix", Path(sys.prefix)),
+            ("python_prefix_bin", Path(sys.prefix) / "bin"),
+            ("python_base_prefix", Path(sys.base_prefix)),
+            ("python_base_prefix_bin", Path(sys.base_prefix) / "bin"),
+        ]
+        paths: dict[str, Any] = {}
+        seen: set[str] = set()
+        for label, candidate in candidates:
+            try:
+                path = Path(os.path.abspath(os.fspath(candidate)))
+            except (OSError, TypeError, ValueError):
+                paths[label] = {"stat": {"error": "InvalidPath"}}
+                continue
+            identity = os.fspath(path)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            entry: dict[str, Any] = {}
+            try:
+                info = os.stat(path)
+                entry["stat"] = {
+                    "mode": oct(stat.S_IMODE(info.st_mode)),
+                    "uid": info.st_uid,
+                    "gid": info.st_gid,
+                    "is_directory": stat.S_ISDIR(info.st_mode),
+                    "is_regular_file": stat.S_ISREG(info.st_mode),
+                }
+            except OSError as exc:
+                entry["stat"] = self._diagnostic_error(exc)
+            try:
+                entry["access_x"] = os.access(path, os.X_OK, effective_ids=True)
+            except (OSError, NotImplementedError, TypeError) as exc:
+                entry["access_x"] = self._diagnostic_error(exc)
+            paths[label] = entry
+
+        try:
+            with open("/proc/self/attr/current", encoding="utf-8") as context_file:
+                context = context_file.read(256).strip().replace("\x00", "")
+            selinux_context: dict[str, Any] = {"value": context}
+        except (OSError, UnicodeError) as exc:
+            selinux_context = self._diagnostic_error(exc)
+
+        return {
+            "uid": os.getuid(),
+            "euid": os.geteuid(),
+            "python_version": ".".join(str(part) for part in sys.version_info[:3]),
+            "python_implementation": sys.implementation.name,
+            "executable_name": Path(sys.executable).name if sys.executable else "",
+            "selinux_context": selinux_context,
+            "paths": paths,
+        }
+
+    @staticmethod
+    def _diagnostic_error(exc: BaseException) -> dict[str, Any]:
+        """Expose only exception type and numeric errno, never path-bearing text."""
+        result: dict[str, Any] = {"error": type(exc).__name__}
+        errno = getattr(exc, "errno", None)
+        if isinstance(errno, int):
+            result["errno"] = errno
+        return result
 
     def _path(self, relative: str, *, must_exist: bool = False) -> Path:
         if not isinstance(relative, str) or not relative:
