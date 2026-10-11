@@ -149,8 +149,11 @@ class BoundedWorkspaceTests(unittest.TestCase):
         outside = self.root.parent / "outside-hardlink.txt"
         outside.write_text("safe original", encoding="utf-8")
         link = self.root / "hard-link.txt"
+        link_fn = getattr(os, "link", None)
+        if link_fn is None:
+            self.skipTest("Hard-link creation is unavailable: os.link is not exposed")
         try:
-            os.link(outside, link)
+            link_fn(outside, link)
         except (OSError, NotImplementedError) as exc:
             self.skipTest(f"Hard-link creation is unavailable: {exc}")
 
