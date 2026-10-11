@@ -38,7 +38,12 @@ async def main() -> None:
             encoding="utf-8",
         )
 
-        child_env = {"AUTHORITYLAB_ROOT": str(root), "HOME": temp}
+        child_env = {
+            "AUTHORITYLAB_ROOT": str(root),
+            "HOME": temp,
+            "PATH": os.environ.get("PATH", ""),
+            "LD_PRELOAD": os.environ.get("LD_PRELOAD", ""),
+        }
         python_path = os.environ.get("PYTHONPATH")
         if python_path:
             child_env["PYTHONPATH"] = python_path
@@ -107,22 +112,29 @@ async def main() -> None:
                 raise AssertionError("symlink operation changed the outside target")
             print("PASS: symlink read/write rejected")
 
-            source = root / "hardlink-source.txt"
-            target = root / "hardlink-target.txt"
-            source.write_text(MARKER, encoding="utf-8")
-            try:
-                os.link(source, target)
-            except OSError as exc:
-                print(f"SKIP: filesystem does not permit hard links ({type(exc).__name__})")
+            if not callable(getattr(os, "link", None)):
+                print("SKIP: os.link unavailable; hard-link behavior not tested")
             else:
-                hardlink_write = await client.call_tool(
-                    "write_file", {"path": "hardlink-target.txt", "content": "should-not-write"}
-                )
-                if not hardlink_write.is_error:
-                    raise AssertionError("hard-linked target write was not rejected")
-                if source.read_text(encoding="utf-8") != MARKER:
-                    raise AssertionError("hard-link rejection changed the source file")
-                print("PASS: hard-linked target write rejected")
+                source = root / "hardlink-source.txt"
+                target = root / "hardlink-target.txt"
+                source.write_text(MARKER, encoding="utf-8")
+                try:
+                    os.link(source, target)
+                except (OSError, NotImplementedError) as exc:
+                    print(
+                        "SKIP: filesystem does not permit hard links "
+                        f"({type(exc).__name__})"
+                    )
+                else:
+                    hardlink_write = await client.call_tool(
+                        "write_file",
+                        {"path": "hardlink-target.txt", "content": "should-not-write"},
+                    )
+                    if not hardlink_write.is_error:
+                        raise AssertionError("hard-linked target write was not rejected")
+                    if source.read_text(encoding="utf-8") != MARKER:
+                        raise AssertionError("hard-link rejection changed the source file")
+                    print("PASS: hard-linked target write rejected")
 
 if __name__ == "__main__":
     asyncio.run(main())
