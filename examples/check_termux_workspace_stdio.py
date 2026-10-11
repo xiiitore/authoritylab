@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -24,8 +25,7 @@ def text_result(result: object) -> str:
     content = getattr(result, "content", [])
     if not content:
         raise AssertionError("MCP tool returned no content")
-    first = content[0]
-    value = getattr(first, "text", None)
+    value = getattr(content[0], "text", None)
     if not isinstance(value, str):
         raise AssertionError("MCP tool did not return text content")
     return value
@@ -39,8 +39,6 @@ async def main() -> None:
         (root / "sample.txt").write_text("read-only smoke test\n", encoding="utf-8")
         (root / "nested").mkdir()
         (root / "nested" / "inside.txt").write_text("nested fixture\n", encoding="utf-8")
-        os.system("true")  # No workspace command is run; only a local fixture is created.
-        import subprocess
         subprocess.run(
             ["git", "init", str(root)],
             check=True,
@@ -81,7 +79,7 @@ async def main() -> None:
                 file_text = text_result(files)
                 if "sample.txt" not in file_text or "inside.txt" in file_text:
                     raise AssertionError("list_files did not return direct files only")
-                print("PASS: list_files is bounded to direct file names")
+                print("PASS: list_files returns direct file names only")
 
                 read = await session.call_tool("read_file", arguments={"path": "sample.txt"})
                 if is_error(read) or "read-only smoke test" not in text_result(read):
@@ -99,6 +97,7 @@ async def main() -> None:
                 if not is_error(unknown):
                     raise AssertionError("unexposed write_file tool was not rejected")
                 print("PASS: write_file is not exposed")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
