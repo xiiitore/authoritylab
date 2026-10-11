@@ -36,15 +36,16 @@ def build_server() -> Server:
             "max_file_bytes": workspace.status().get("max_file_bytes"),
         },
         list_files=lambda: [
-            name.rstrip("/")
-            for name in workspace.list_files(".")[:100]
-        ],
+            name
+            for name in workspace.list_files(".")
+            if not name.endswith("/")
+        ][:100],
         read_file=lambda path: workspace.read_file(path),
     )
     core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
     server = Server(
         "authoritylab-termux",
-        version="0.2.2",
+        version="0.2.3",
         instructions="Read-only workspace bridge. Only status, list_files, and read_file are exposed.",
     )
 
@@ -54,12 +55,20 @@ def build_server() -> Server:
             types.Tool(
                 name="status",
                 description="Get bounded workspace status.",
-                inputSchema={"type": "object", "properties": {}},
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
             ),
             types.Tool(
                 name="list_files",
-                description="List workspace root entries.",
-                inputSchema={"type": "object", "properties": {}},
+                description="List direct file names in the workspace root.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
             ),
             types.Tool(
                 name="read_file",
@@ -68,6 +77,7 @@ def build_server() -> Server:
                     "type": "object",
                     "properties": {"path": {"type": "string"}},
                     "required": ["path"],
+                    "additionalProperties": False,
                 },
             ),
         ]
@@ -76,9 +86,9 @@ def build_server() -> Server:
     async def call_tool(
         name: str, arguments: dict[str, Any]
     ) -> list[types.TextContent]:
-        if name == "status":
-            payload = {}
-        elif name == "list_files":
+        if name in {"status", "list_files"}:
+            if arguments:
+                raise ValueError(f"{name} does not accept arguments")
             payload = {}
         elif name == "read_file":
             payload = arguments
@@ -94,10 +104,12 @@ def build_server() -> Server:
         except MCPAdapterError as exc:
             raise ValueError(str(exc)) from None
 
-        return [types.TextContent(
-            type="text",
-            text=json.dumps(result, ensure_ascii=False),
-        )]
+        return [
+            types.TextContent(
+                type="text",
+                text=json.dumps(result, ensure_ascii=False),
+            )
+        ]
 
     return server
 
