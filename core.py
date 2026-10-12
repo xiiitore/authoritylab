@@ -9,6 +9,7 @@ from .audit_log import DurableAuditLog
 from .execution import ExecutionBlockedError, HandlerRunner, InProcessRunner
 from .governance import GovernancePolicy
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
+from .loop_guardrails import LoopDetector, ToolObservation
 from .tools import ToolRegistry
 from .verification import ResultVerifier
 
@@ -21,18 +22,46 @@ class WorkflowCore:
         verifier: ResultVerifier | None = None,
         audit_log: DurableAuditLog | None = None,
         execution_runner: HandlerRunner | None = None,
+        loop_detector: LoopDetector | None = None,
     ) -> None:
         if audit_log is not None and not isinstance(audit_log, DurableAuditLog):
             raise TypeError("audit_log must be a DurableAuditLog or None")
         if execution_runner is not None and not callable(getattr(execution_runner, "run", None)):
             raise TypeError("execution_runner must provide a callable run method")
+        if loop_detector is not None and not isinstance(loop_detector, LoopDetector):
+            raise TypeError("loop_detector must be a LoopDetector or None")
         self.registry = registry
         self.policy = policy or GovernancePolicy()
         self.verifier = verifier or ResultVerifier()
         self.audit_log = audit_log
         self.execution_runner = execution_runner if execution_runner is not None else InProcessRunner()
+        self.loop_detector = loop_detector if loop_detector is not None else LoopDetector()
+        self._loop_guard_blocked = False
+        self._loop_guard_reason: str | None = None
+
+    def reset_loop_guard(self, progress_observation: ToolObservation) -> None:
+        """Clear a loop block only with a harness-sourced, observable progress event.
+
+        The caller is responsible for grounding this event in an external milestone;
+        a model-authored assertion alone is not sufficient evidence of progress.
+        """
+        if not isinstance(progress_observation, ToolObservation):
+            raise TypeError("progress_observation must be a ToolObservation")
+        if not progress_observation.progress or not progress_observation.event_id:
+            raise ValueError("reset requires a progress=True observation with an event_id")
+        self.loop_detector.observe(progress_observation)
+        self._loop_guard_blocked = False
+        self._loop_guard_reason = None
 
     def run(self, task: Task) -> WorkflowReport:
+        if self._loop_guard_blocked:
+            result = ToolResult(ok=False, error="loop guard blocked execution pending observed progress")
+            checks = (CheckResult(
+                "loop_guard", CheckStatus.BLOCKED,
+                self._loop_guard_reason or "execution remains blocked until observed progress is recorded",
+            ),)
+            audit = self._audit(task, None, "loop guard blocked execution before handler invocation", result, checks, WorkflowStatus.BLOCKED)
+            return self._finish(task, None, WorkflowStatus.BLOCKED, result, checks, audit)
         handler = self.registry.resolve(task.kind)
         if handler is None:
             outcome = (
@@ -66,6 +95,37 @@ class WorkflowCore:
             )
 
         checks, status = self.verifier.verify(result, self.policy, task.kind)
+        try:
+            observation = ToolObservation(
+                tool_name=task.kind,
+                arguments=dict(task.payload),
+                result={"ok": result.ok, "output": result.output, "error": result.error},
+                status="success" if result.ok else "failed",
+                event_id=task.task_id,
+            )
+        except (TypeError, ValueError, OverflowError):
+            loop_check = CheckResult(
+                "loop_guard", CheckStatus.UNKNOWN,
+                "execution result could not be fingerprinted as JSON-compatible data; loop detection is inconclusive",
+            )
+        else:
+            findings = self.loop_detector.observe(observation)
+            if findings:
+                codes = ", ".join(finding.code for finding in findings)
+                details = "; ".join(finding.message for finding in findings)
+                self._loop_guard_blocked = True
+                self._loop_guard_reason = f"{codes}: {details}"
+                loop_check = CheckResult("loop_guard", CheckStatus.BLOCKED, self._loop_guard_reason)
+            else:
+                loop_check = CheckResult(
+                    "loop_guard", CheckStatus.PASS,
+                    "no configured loop pattern detected in the observed trace window",
+                )
+        checks = checks + (loop_check,)
+        if loop_check.status == CheckStatus.BLOCKED:
+            status = WorkflowStatus.BLOCKED
+        elif loop_check.status == CheckStatus.UNKNOWN and status == WorkflowStatus.PASS:
+            status = WorkflowStatus.UNKNOWN
         outcome = "completed" if status == WorkflowStatus.PASS else "completed with non-pass status"
         audit = self._audit(task, task.kind, outcome, result, checks, status)
         return self._finish(task, task.kind, status, result, checks, audit)
