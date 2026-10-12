@@ -26,7 +26,7 @@ CI also installs the project and runs the test suite using pytest. The import pa
 
 ## Loop and unsupported-execution-claim guardrails
 
-`WorkflowCore` now observes each completed handler call with a bounded, run-scoped `LoopDetector`. It can detect repeated identical calls with unchanged outcomes, short repeated call cycles, and consecutive failure cascades. Once a configured pattern is detected, the current report is `BLOCKED` and subsequent handler calls through that same `WorkflowCore` instance are blocked before execution.
+`WorkflowCore` now observes task attempts routed through that instance—including missing-handler and execution-backend-blocked outcomes—with a bounded, per-instance `LoopDetector`. It can detect repeated identical calls with unchanged outcomes, short repeated call cycles, and consecutive failure cascades. Once a configured pattern is detected, the current report is `BLOCKED` and subsequent handler calls through that same `WorkflowCore` instance are blocked before execution.
 
 A caller may clear the latch only by calling `reset_loop_guard()` with a `ToolObservation` marked `progress=True` and carrying an event ID. The integration can validate the event shape, but it cannot authenticate the underlying milestone by itself: production callers must create progress observations from trusted, externally observable events, not model-authored assertions. The call that crosses the detection threshold has already executed; this guard prevents subsequent calls, not the triggering call.
 
