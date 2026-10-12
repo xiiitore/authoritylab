@@ -25,11 +25,11 @@ class WorkflowTests(unittest.TestCase):
         self.registry.register("echo", lambda task: ToolResult(ok=True, output={"x": 1}), trusted=True)
         report = self.core.run(Task("t-1", "echo", {"x": 1}))
         self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual([c.status.value for c in report.checks], ["PASS", "PASS", "PASS"])
+        self.assertEqual([c.status.value for c in report.checks], ["PASS", "PASS", "PASS", "PASS"])
         self.assertEqual(report.audit["status"], "PASS")
         self.assertEqual(
             [item["name"] for item in report.audit["checks"]],
-            ["result_present", "tool_succeeded", "task_evidence_valid"],
+            ["result_present", "tool_succeeded", "task_evidence_valid", "loop_guard"],
         )
         self.assertNotIn("output", report.audit)
 
