@@ -7,6 +7,7 @@
 - `GovernancePolicy`: preserves mandatory execution checks and configures task-specific structural evidence schemas.
 - `SemanticValidatorRegistry`: optional registry of application-supplied, task-kind-specific validators.
 - `ResultVerifier`: computes a final status from execution, structural, and any configured semantic check results.
+- `LoopDetector`: bounded run-scoped detector for repeated calls/outcomes, short oscillations, and consecutive failure cascades; a detected pattern latches `WorkflowCore` into `BLOCKED` until a trusted progress event is supplied.
 - `InProcessRunner`: compatibility backend that invokes a handler in the current process.
 - `SubprocessHandlerRunner`: optional child-process backend with JSON IPC, a wall-clock timeout, and POSIX resource limits.
 - `DockerSandboxRunner`: optional digest-pinned Docker backend with disabled networking, no host mounts, a read-only root filesystem, dropped capabilities, a non-root identity, and container resource limits.
@@ -17,10 +18,15 @@
 1. Validate task identity and kind.
 2. Resolve a handler. An absent handler produces `BLOCKED`.
 3. Run the handler. Exceptions and malformed handler returns become explicit failure results.
-4. Evaluate mandatory execution checks and structural evidence completeness.
-5. If semantic mode is enabled by injecting a `SemanticValidatorRegistry`, require a validator for every task kind and run it only after structural completeness passes. Missing validators yield `UNKNOWN`.
-6. Determine the overall status from all check results.
-7. Return the report; no external side effects or persistence are implied.
+4. Feed the observed call, arguments, outcome, and task event ID to the bounded loop detector. A finding marks the report `BLOCKED` and latches the core so subsequent handler calls do not execute until a progress event is supplied.
+5. Evaluate mandatory execution checks and structural evidence completeness.
+6. If semantic mode is enabled by injecting a `SemanticValidatorRegistry`, require a validator for every task kind and run it only after structural completeness passes. Missing validators yield `UNKNOWN`.
+7. Determine the overall status from all check results, including the loop guard.
+8. Return the report; no external side effects or persistence are implied.
+
+## Loop-guard limits
+
+The detector sees only events observed by this `WorkflowCore` instance and uses deterministic signatures over JSON-compatible arguments/results. The call that crosses the detection threshold has already run; only later calls are blocked. A progress event resets the detector only when the caller supplies `progress=True` and an event ID, so the host must independently establish that the milestone is real. This library-level integration does not intercept ChatGPT runtime calls or external plugins. If an observation cannot be fingerprinted, the loop check is `UNKNOWN`, not `PASS`.
 
 ## Evidence levels
 
