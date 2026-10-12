@@ -93,6 +93,7 @@ class LoopDetector:
         self.failure_threshold = failure_threshold
         self.max_cycle_length = max_cycle_length
         self._events: deque[ToolObservation] = deque(maxlen=window_size)
+        self._active_findings: set[str] = set()
 
     @property
     def observations(self) -> tuple[ToolObservation, ...]:
@@ -100,16 +101,20 @@ class LoopDetector:
 
     def reset(self) -> None:
         self._events.clear()
+        self._active_findings.clear()
 
     def observe(self, event: ToolObservation) -> tuple[GuardrailFinding, ...]:
         if event.progress:
             self._events.clear()
+            self._active_findings.clear()
         self._events.append(event)
         events = tuple(self._events)
+        # A progress-marked event is a boundary, not one of the stalled calls.
+        segment = events[1:] if events and events[0].progress else events
         findings: list[GuardrailFinding] = []
 
-        if len(events) >= self.repeat_threshold:
-            tail = events[-self.repeat_threshold:]
+        if len(segment) >= self.repeat_threshold:
+            tail = segment[-self.repeat_threshold:]
             same_call = len({item.call_fingerprint for item in tail}) == 1
             same_outcome = len({item.outcome_fingerprint for item in tail}) == 1
             if same_call and same_outcome:
@@ -122,7 +127,7 @@ class LoopDetector:
                 ))
 
         if not findings:
-            cycle = self._repeated_cycle(events)
+            cycle = self._repeated_cycle(segment)
             if cycle:
                 findings.append(GuardrailFinding(
                     code="OSCILLATION_NO_PROGRESS",
@@ -132,8 +137,8 @@ class LoopDetector:
                     recommendation="Break the cycle and re-plan using recorded observations; do not replay the same sequence automatically.",
                 ))
 
-        if len(events) >= self.failure_threshold:
-            tail = events[-self.failure_threshold:]
+        if len(segment) >= self.failure_threshold:
+            tail = segment[-self.failure_threshold:]
             if all(item.status.lower() in self.FAILURE_STATUSES for item in tail):
                 findings.append(GuardrailFinding(
                     code="CONSECUTIVE_FAILURE_CASCADE",
@@ -142,7 +147,10 @@ class LoopDetector:
                     event_ids=tuple(item.event_id for item in tail if item.event_id),
                     recommendation="Stop further automated tool calls and surface the distinct failures for diagnosis.",
                 ))
-        return tuple(findings)
+        current_codes = {finding.code for finding in findings}
+        new_findings = tuple(finding for finding in findings if finding.code not in self._active_findings)
+        self._active_findings = current_codes
+        return new_findings
 
     def _repeated_cycle(self, events: tuple[ToolObservation, ...]) -> tuple[int, int] | None:
         signatures = tuple((e.call_fingerprint, e.outcome_fingerprint) for e in events)
