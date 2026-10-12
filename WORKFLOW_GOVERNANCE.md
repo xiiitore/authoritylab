@@ -116,4 +116,8 @@ If an item was not checked, label it `NOT_CHECKED` or `UNKNOWN`; do not silently
 
 ## 9. Current implementation boundary
 
-This contract is documentation until executable checks enforce it. The existing loop-guard PRs are separate proposals: PR #35 supplies the detector primitive; PR #36 integrates it into the repository's WorkflowCore on a branch based on PR #35. Neither PR being open or CI passing proves that this contract is active in external plugins, the EAV bridge, ChatGPT runtime, or a deployed service.
+The repository now contains the loop-detector primitive and its integration into `WorkflowCore` on `main` (PRs #35 and #38), plus this governance contract (PR #37). These controls apply only to code paths that instantiate and use this library. They do not establish enforcement in external plugins, the EAV bridge, ChatGPT's private runtime, or any deployed service.
+
+The bounded Termux MCP bridge is also present in the repository (PR #34). Its merge and hosted CI do not prove the bridge is running or working on a specific Android device. Device-side process startup, tool inventory, harmless end-to-end invocation, and postcondition remain separate checks.
+
+When this document's wording conflicts with executable code, tests, or observed runtime behavior, record the discrepancy and resolve it; documentation must not be treated as proof of implementation. Keep runtime integration `UNKNOWN` until its own observable acceptance test passes.
