@@ -38,6 +38,7 @@ class WorkflowCore:
         self.loop_detector = loop_detector if loop_detector is not None else LoopDetector()
         self._loop_guard_blocked = False
         self._loop_guard_reason: str | None = None
+        self._loop_event_counter = 0
 
     def reset_loop_guard(self, progress_observation: ToolObservation) -> None:
         """Clear a loop block only with a harness-sourced, observable progress event.
@@ -69,8 +70,10 @@ class WorkflowCore:
                 if self.registry.is_registered(task.kind)
                 else "no handler registered for task kind"
             )
-            audit = self._audit(task, None, outcome, None, (), WorkflowStatus.BLOCKED)
-            return self._finish(task, None, WorkflowStatus.BLOCKED, None, (), audit)
+            loop_check = self._observe_loop_guard(task, None, fallback_error=outcome, fallback_status="blocked")
+            checks = (loop_check,)
+            audit = self._audit(task, None, outcome, None, checks, WorkflowStatus.BLOCKED)
+            return self._finish(task, None, WorkflowStatus.BLOCKED, None, checks, audit)
 
         try:
             result = self.execution_runner.run(handler, task)
@@ -86,6 +89,8 @@ class WorkflowCore:
                 CheckStatus.BLOCKED,
                 "configured execution backend could not safely accept the task",
             ),)
+            loop_check = self._observe_loop_guard(task, result)
+            checks = checks + (loop_check,)
             audit = self._audit(task, task.kind, "execution backend blocked", result, checks, WorkflowStatus.BLOCKED)
             return self._finish(task, task.kind, WorkflowStatus.BLOCKED, result, checks, audit)
         except Exception as exc:
@@ -95,32 +100,7 @@ class WorkflowCore:
             )
 
         checks, status = self.verifier.verify(result, self.policy, task.kind)
-        try:
-            observation = ToolObservation(
-                tool_name=task.kind,
-                arguments=dict(task.payload),
-                result={"ok": result.ok, "output": result.output, "error": result.error},
-                status="success" if result.ok else "failed",
-                event_id=task.task_id,
-            )
-        except (TypeError, ValueError, OverflowError):
-            loop_check = CheckResult(
-                "loop_guard", CheckStatus.UNKNOWN,
-                "execution result could not be fingerprinted as JSON-compatible data; loop detection is inconclusive",
-            )
-        else:
-            findings = self.loop_detector.observe(observation)
-            if findings:
-                codes = ", ".join(finding.code for finding in findings)
-                details = "; ".join(finding.message for finding in findings)
-                self._loop_guard_blocked = True
-                self._loop_guard_reason = f"{codes}: {details}"
-                loop_check = CheckResult("loop_guard", CheckStatus.BLOCKED, self._loop_guard_reason)
-            else:
-                loop_check = CheckResult(
-                    "loop_guard", CheckStatus.PASS,
-                    "no configured loop pattern detected in the observed trace window",
-                )
+        loop_check = self._observe_loop_guard(task, result)
         checks = checks + (loop_check,)
         if loop_check.status == CheckStatus.BLOCKED:
             status = WorkflowStatus.BLOCKED
@@ -129,6 +109,50 @@ class WorkflowCore:
         outcome = "completed" if status == WorkflowStatus.PASS else "completed with non-pass status"
         audit = self._audit(task, task.kind, outcome, result, checks, status)
         return self._finish(task, task.kind, status, result, checks, audit)
+
+
+    def _observe_loop_guard(
+        self,
+        task: Task,
+        result: ToolResult | None,
+        *,
+        fallback_error: str | None = None,
+        fallback_status: str = "failed",
+    ) -> CheckResult:
+        """Record one task attempt, including blocked routing/backend outcomes."""
+        self._loop_event_counter += 1
+        try:
+            observation = ToolObservation(
+                tool_name=task.kind,
+                arguments=dict(task.payload),
+                result={
+                    "ok": result.ok if result is not None else False,
+                    "output": result.output if result is not None else None,
+                    "error": result.error if result is not None else fallback_error,
+                },
+                status=(
+                    ("success" if result.ok else "failed")
+                    if result is not None
+                    else fallback_status
+                ),
+                event_id=f"{task.task_id}:{self._loop_event_counter}",
+            )
+        except (TypeError, ValueError, OverflowError):
+            return CheckResult(
+                "loop_guard", CheckStatus.UNKNOWN,
+                "task observation could not be fingerprinted as JSON-compatible data; loop detection is inconclusive",
+            )
+        findings = self.loop_detector.observe(observation)
+        if findings:
+            codes = ", ".join(finding.code for finding in findings)
+            details = "; ".join(finding.message for finding in findings)
+            self._loop_guard_blocked = True
+            self._loop_guard_reason = f"{codes}: {details}"
+            return CheckResult("loop_guard", CheckStatus.BLOCKED, self._loop_guard_reason)
+        return CheckResult(
+            "loop_guard", CheckStatus.PASS,
+            "no configured loop pattern detected in the observed trace window",
+        )
 
     def _finish(
         self,
