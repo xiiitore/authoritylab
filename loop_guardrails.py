@@ -196,8 +196,10 @@ def audit_execution_claim(
         return ExecutionClaimAudit("UNKNOWN", "No successful observation was found, and trace completeness is not established.", ids)
     if not claimed_success and successful:
         return ExecutionClaimAudit("CONTRADICTED", "The trace records a successful outcome despite the claim that execution did not succeed.", tuple(event.event_id for event in successful if event.event_id))
-    if matching:
-        return ExecutionClaimAudit("SUPPORTED", "The trace contains no successful outcome for the named tool.", ids)
+    if not claimed_success and trace_complete:
+        return ExecutionClaimAudit("SUPPORTED", "The complete trace contains no successful outcome for the named tool.", ids)
+    if not claimed_success:
+        return ExecutionClaimAudit("UNKNOWN", "No successful outcome was observed, but trace completeness is not established.", ids)
     if trace_complete:
-        return ExecutionClaimAudit("SUPPORTED", "The complete trace contains no execution of the named tool.", ())
+        return ExecutionClaimAudit("CONTRADICTED", "The complete trace contains no execution of the named tool.", ())
     return ExecutionClaimAudit("UNKNOWN", "The trace is incomplete, so absence of an execution cannot be established.", ())
