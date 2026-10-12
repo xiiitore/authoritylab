@@ -1,6 +1,6 @@
 import unittest
 
-from loop_guardrails import LoopDetector, ToolObservation, audit_execution_claim
+from authoritylab.loop_guardrails import LoopDetector, ToolObservation, audit_execution_claim
 
 
 class LoopDetectorTests(unittest.TestCase):
