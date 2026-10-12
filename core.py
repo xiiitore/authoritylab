@@ -192,7 +192,11 @@ class WorkflowCore:
                 else None
             ),
             "checks": [
-                {"name": check.name, "status": check.status.value}
+                {
+                    "name": check.name,
+                    "status": check.status.value,
+                    **({"detail": check.detail} if check.name == "loop_guard" else {}),
+                }
                 for check in checks
             ],
             "recorded_at": datetime.now(timezone.utc).isoformat(),
