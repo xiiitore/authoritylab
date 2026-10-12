@@ -18,7 +18,7 @@
 1. Validate task identity and kind.
 2. Resolve a handler. An absent handler produces `BLOCKED`.
 3. Run the handler. Exceptions and malformed handler returns become explicit failure results.
-4. Feed the observed call, arguments, outcome, and task event ID to the bounded loop detector. A finding marks the report `BLOCKED` and latches the core so subsequent handler calls do not execute until a progress event is supplied.
+4. Feed each routed task attempt, arguments, outcome, and unique per-instance event ID to the bounded loop detector, including missing-handler and execution-backend-blocked outcomes. A finding marks the report `BLOCKED` and latches the core so subsequent handler calls do not execute until a progress event is supplied.
 5. Evaluate mandatory execution checks and structural evidence completeness.
 6. If semantic mode is enabled by injecting a `SemanticValidatorRegistry`, require a validator for every task kind and run it only after structural completeness passes. Missing validators yield `UNKNOWN`.
 7. Determine the overall status from all check results, including the loop guard.
