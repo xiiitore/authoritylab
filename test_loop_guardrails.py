@@ -76,6 +76,34 @@ class LoopDetectorTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "UNKNOWN")
 
+    def test_failed_observation_does_not_prove_no_success_in_incomplete_trace(self):
+        result = audit_execution_claim(
+            tool_name="pytest",
+            claimed_success=False,
+            observations=[ToolObservation("pytest", {}, {"exit_code": 1}, status="failed", event_id="t1")],
+            trace_complete=False,
+        )
+        self.assertEqual(result.status, "UNKNOWN")
+
+    def test_complete_trace_can_support_absence_of_success(self):
+        result = audit_execution_claim(
+            tool_name="pytest",
+            claimed_success=False,
+            observations=[ToolObservation("pytest", {}, {"exit_code": 1}, status="failed", event_id="t1")],
+            trace_complete=True,
+        )
+        self.assertEqual(result.status, "SUPPORTED")
+
+    def test_absence_of_any_event_requires_complete_trace(self):
+        incomplete = audit_execution_claim(
+            tool_name="pytest", claimed_success=False, observations=[], trace_complete=False
+        )
+        complete = audit_execution_claim(
+            tool_name="pytest", claimed_success=False, observations=[], trace_complete=True
+        )
+        self.assertEqual(incomplete.status, "UNKNOWN")
+        self.assertEqual(complete.status, "SUPPORTED")
+
     def test_success_observation_does_not_claim_semantic_correctness(self):
         result = audit_execution_claim(
             tool_name="pytest",
