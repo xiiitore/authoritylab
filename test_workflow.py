@@ -195,6 +195,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(fourth.status, WorkflowStatus.BLOCKED)
         self.assertEqual(len(calls), 3, "the latched guard must block the fourth handler call")
         self.assertIn("EXACT_REPEAT_NO_PROGRESS", third.audit["checks"][-1]["name"] + third.checks[-1].detail)
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", third.audit["checks"][-1]["detail"])
 
     def test_loop_guard_requires_observed_progress_to_clear_latch(self):
         calls = []
