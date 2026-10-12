@@ -10,6 +10,7 @@ from authoritylab import (
 )
 from authoritylab.tools import ToolRegistry
 from authoritylab.verification import ResultVerifier
+from authoritylab.loop_guardrails import LoopDetector, ToolObservation
 
 
 class WorkflowTests(unittest.TestCase):
@@ -24,11 +25,11 @@ class WorkflowTests(unittest.TestCase):
         self.registry.register("echo", lambda task: ToolResult(ok=True, output={"x": 1}), trusted=True)
         report = self.core.run(Task("t-1", "echo", {"x": 1}))
         self.assertEqual(report.status, WorkflowStatus.PASS)
-        self.assertEqual([c.status.value for c in report.checks], ["PASS", "PASS", "PASS"])
+        self.assertEqual([c.status.value for c in report.checks], ["PASS", "PASS", "PASS", "PASS"])
         self.assertEqual(report.audit["status"], "PASS")
         self.assertEqual(
             [item["name"] for item in report.audit["checks"]],
-            ["result_present", "tool_succeeded", "task_evidence_valid"],
+            ["result_present", "tool_succeeded", "task_evidence_valid", "loop_guard"],
         )
         self.assertNotIn("output", report.audit)
 
@@ -167,6 +168,69 @@ class WorkflowTests(unittest.TestCase):
     def test_empty_evidence_schema_rejected(self):
         with self.assertRaises(ValueError):
             EvidenceSchema("echo", ())
+
+
+    def test_loop_guard_blocks_after_repeated_identical_execution(self):
+        calls = []
+        registry = ToolRegistry()
+        registry.register(
+            "echo",
+            lambda task: calls.append(dict(task.payload)) or ToolResult(ok=True, output={"x": "same"}),
+            trusted=True,
+        )
+        core = WorkflowCore(
+            registry,
+            policy=GovernancePolicy(evidence_schemas=(EvidenceSchema("echo", ("x",)),)),
+            loop_detector=LoopDetector(repeat_threshold=3),
+        )
+
+        first = core.run(Task("loop-1", "echo", {"input": "same"}))
+        second = core.run(Task("loop-2", "echo", {"input": "same"}))
+        third = core.run(Task("loop-3", "echo", {"input": "same"}))
+        fourth = core.run(Task("loop-4", "echo", {"input": "same"}))
+
+        self.assertEqual(first.status, WorkflowStatus.PASS)
+        self.assertEqual(second.status, WorkflowStatus.PASS)
+        self.assertEqual(third.status, WorkflowStatus.BLOCKED)
+        self.assertEqual(fourth.status, WorkflowStatus.BLOCKED)
+        self.assertEqual(len(calls), 3, "the latched guard must block the fourth handler call")
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", third.audit["checks"][-1]["name"] + third.checks[-1].detail)
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", third.audit["checks"][-1]["detail"])
+
+    def test_loop_guard_requires_observed_progress_to_clear_latch(self):
+        calls = []
+        registry = ToolRegistry()
+        registry.register(
+            "echo",
+            lambda task: calls.append(task.task_id) or ToolResult(ok=True, output={"x": "same"}),
+            trusted=True,
+        )
+        core = WorkflowCore(
+            registry,
+            policy=GovernancePolicy(evidence_schemas=(EvidenceSchema("echo", ("x",)),)),
+            loop_detector=LoopDetector(repeat_threshold=3),
+        )
+        for i in range(3):
+            report = core.run(Task(f"before-{i}", "echo", {"input": "same"}))
+        self.assertEqual(report.status, WorkflowStatus.BLOCKED)
+        with self.assertRaises(ValueError):
+            core.reset_loop_guard(ToolObservation("harness.progress", {}, {}, event_id="missing-progress-flag"))
+        core.reset_loop_guard(ToolObservation(
+            "harness.progress", {"milestone": "verified-change"}, {"verified": True},
+            progress=True, event_id="progress-verified-1",
+        ))
+        after_reset = core.run(Task("after-reset-1", "echo", {"input": "same"}))
+        self.assertEqual(after_reset.status, WorkflowStatus.PASS)
+        self.assertEqual(len(calls), 4)
+
+    def test_non_json_result_makes_loop_check_unknown_not_pass(self):
+        registry = ToolRegistry()
+        registry.register("odd", lambda task: ToolResult(ok=True, output=object()), trusted=True)
+        core = WorkflowCore(registry)
+        report = core.run(Task("non-json", "odd"))
+        loop_check = next(check for check in report.checks if check.name == "loop_guard")
+        self.assertEqual(loop_check.status.value, "UNKNOWN")
+        self.assertEqual(report.status, WorkflowStatus.UNKNOWN)
 
 
 if __name__ == "__main__":
