@@ -24,6 +24,30 @@ python -m unittest -v test_workflow test_audit_log test_audit_integration test_s
 
 CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
 
+## Loop and unsupported-execution-claim guardrails
+
+`WorkflowCore` now observes task attempts routed through that instance—including missing-handler and execution-backend-blocked outcomes—with a bounded, per-instance `LoopDetector`. It can detect repeated identical calls with unchanged outcomes, short repeated call cycles, and consecutive failure cascades. Once a configured pattern is detected, the current report is `BLOCKED` and subsequent handler calls through that same `WorkflowCore` instance are blocked before execution.
+
+A caller may clear the latch only by calling `reset_loop_guard()` with a `ToolObservation` marked `progress=True` and carrying an event ID. The integration can validate the event shape, but it cannot authenticate the underlying milestone by itself: production callers must create progress observations from trusted, externally observable events, not model-authored assertions. The call that crosses the detection threshold has already executed; this guard prevents subsequent calls, not the triggering call.
+
+Example:
+
+```python
+from authoritylab import LoopDetector, ToolObservation, WorkflowCore
+
+core = WorkflowCore(registry, policy=policy, loop_detector=LoopDetector())
+# After the harness verifies a concrete progress milestone:
+core.reset_loop_guard(ToolObservation(
+    tool_name="harness.progress",
+    arguments={"milestone": "verified-new-strategy"},
+    result={"verified": True},
+    progress=True,
+    event_id="progress-event-17",
+))
+```
+
+Non-JSON-compatible arguments or results cannot be fingerprinted; the loop check becomes `UNKNOWN` rather than silently passing. Detection is a bounded heuristic over observations supplied to one `WorkflowCore` instance. It is not integrated into ChatGPT's private runtime or external plugin calls, and it does not prove semantic correctness. `audit_execution_claim()` separately compares a claim about a named tool's success with the observed trace; `SUPPORTED` means a matching successful observation exists, not that its output is true.
+
 ## Example
 
 See `basic_workflow.py` in the repository root. Architecture and status definitions are documented in `architecture.md` and `verification.md`.
