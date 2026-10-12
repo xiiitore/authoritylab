@@ -38,6 +38,25 @@ class LoopDetectorTests(unittest.TestCase):
             findings = detector.observe(ToolObservation(name, {}, {"error": "x"}, status="failed", event_id=str(i)))
         self.assertIn("CONSECUTIVE_FAILURE_CASCADE", {f.code for f in findings})
 
+    def test_loop_finding_is_emitted_once_per_streak(self):
+        detector = LoopDetector()
+        for _ in range(3):
+            findings = detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", {f.code for f in findings})
+        findings = detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
+        self.assertNotIn("EXACT_REPEAT_NO_PROGRESS", {f.code for f in findings})
+
+    def test_progress_marker_does_not_count_as_a_stalled_call(self):
+        detector = LoopDetector()
+        for _ in range(2):
+            detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
+        detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}, progress=True))
+        for _ in range(2):
+            findings = detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
+        self.assertNotIn("EXACT_REPEAT_NO_PROGRESS", {f.code for f in findings})
+        findings = detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", {f.code for f in findings})
+
     def test_non_json_arguments_are_rejected_at_ingestion(self):
         with self.assertRaises(TypeError):
             ToolObservation("tool", object())
