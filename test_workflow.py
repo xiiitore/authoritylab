@@ -233,5 +233,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.UNKNOWN)
 
 
+    def test_missing_handler_attempts_are_observed_and_can_trip_guard(self):
+        core = WorkflowCore(ToolRegistry(), loop_detector=LoopDetector(repeat_threshold=3))
+        reports = [core.run(Task("missing", "not-registered", {"x": 1})) for _ in range(3)]
+        self.assertTrue(all(report.status == WorkflowStatus.BLOCKED for report in reports))
+        self.assertIn("loop_guard", [check.name for check in reports[-1].checks])
+        self.assertIn("EXACT_REPEAT_NO_PROGRESS", reports[-1].checks[-1].detail)
+        event_ids = [event.event_id for event in core.loop_detector.observations]
+        self.assertEqual(len(event_ids), len(set(event_ids)))
+
+    def test_reused_task_ids_do_not_reuse_loop_event_ids(self):
+        registry = ToolRegistry()
+        registry.register("echo", lambda task: ToolResult(ok=True, output={"x": 1}), trusted=True)
+        core = WorkflowCore(registry, loop_detector=LoopDetector(repeat_threshold=4))
+        for _ in range(3):
+            core.run(Task("same-task-id", "echo", {"x": 1}))
+        event_ids = [event.event_id for event in core.loop_detector.observations]
+        self.assertEqual(len(event_ids), 3)
+        self.assertEqual(len(set(event_ids)), 3)
+
+
+
 if __name__ == "__main__":
     unittest.main()
