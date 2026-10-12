@@ -50,7 +50,7 @@ Non-JSON-compatible arguments or results cannot be fingerprinted; the loop check
 
 ## Example
 
-See `basic_workflow.py` in the repository root. Architecture and status definitions are documented in `architecture.md` and `verification.md`.
+See `basic_workflow.py` in the repository root. Architecture and status definitions are documented in `architecture.md` and `verification.md`. The canonical coordination, authority, evidence, and release contract is in [`WORKFLOW_GOVERNANCE.md`](WORKFLOW_GOVERNANCE.md).
 
 ## Status semantics
 
