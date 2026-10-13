@@ -186,6 +186,31 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(UnicodeDecodeError):
             self.read("invalid.txt")
 
+    def test_fifo_target_is_opened_nonblocking_then_rejected(self) -> None:
+        mkfifo = getattr(os, "mkfifo", None)
+        nonblock = getattr(os, "O_NONBLOCK", None)
+        if not callable(mkfifo) or nonblock is None:
+            self.skipTest("FIFO or non-blocking open is unavailable")
+        fifo = self.root / "pipe.txt"
+        try:
+            mkfifo(fifo)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"FIFO creation is unavailable: {exc}")
+
+        real_open = os.open
+
+        def require_nonblocking(path, flags, *args, **kwargs):
+            if path == "pipe.txt":
+                self.assertNotEqual(
+                    flags & nonblock, 0,
+                    "confined reads must not block while opening a FIFO",
+                )
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch("authoritylab.secure_paths.os.open", side_effect=require_nonblocking):
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                self.read("pipe.txt")
+
     def test_rejects_non_regular_target(self) -> None:
         with self.assertRaises((OSError, ValueError)):
             self.read("nested")
