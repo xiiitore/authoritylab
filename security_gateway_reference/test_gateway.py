@@ -4,10 +4,16 @@ import os
 import tempfile
 import unittest
 
-from .gateway import (
-    Claims, VerifiedToken, Status, Gateway, SQLiteStore, ExecutionCore,
-    StaticVerifier, StaticRevocations, FixedClock, PassCritic,
-)
+if __package__:
+    from .gateway import (
+        Claims, VerifiedToken, Status, Gateway, SQLiteStore, ExecutionCore,
+        StaticVerifier, StaticRevocations, FixedClock, PassCritic,
+    )
+else:
+    from security_gateway_reference.gateway import (
+        Claims, VerifiedToken, Status, Gateway, SQLiteStore, ExecutionCore,
+        StaticVerifier, StaticRevocations, FixedClock, PassCritic,
+    )
 
 NOW = datetime(2026, 10, 13, 10, 0, tzinfo=timezone.utc)
 
