@@ -4,10 +4,11 @@ This module is an isolated reference prototype for testing authorization and ide
 
 ## Run
 
-From the repository root after adding this directory:
+From the repository root:
 
 ```sh
-python -m unittest -v security_gateway_reference.test_gateway
+python -m unittest -v security_gateway_reference.test_gateway security_gateway_reference.test_gateway_hardening
+python -m pytest -q
 ```
 
 ## Contracts and limitations
@@ -21,6 +22,6 @@ python -m unittest -v security_gateway_reference.test_gateway
 - SQLite tests do not prove correctness of a distributed database or a production business transaction. The real effect and idempotency record must share one transaction boundary or use an equivalent proven protocol.
 - Context isolation is not implemented or certified by this module.
 
-## Current verification
+## Verification coverage
 
-The unit tests exercise invalid audience/issuer/scope, revoked tokens, revocation outage, temporal boundaries, unverified signatures, critic overreach, idempotent retries, nonce replay, request fingerprint conflicts, pending reconciliation, and two SQLite connections. Passing these tests is evidence only for these test paths, not a production security certification.
+Tests cover invalid audience/issuer/scope, revoked tokens and revocation outage, expired/future/naive/malformed time claims, trusted-clock failure, unverified signatures, critic overreach, idempotent retries, nonce replay, request fingerprint conflicts, pending reconciliation, and two SQLite connections sharing one database. Passing these tests is evidence only for these test paths, not a production security certification.
