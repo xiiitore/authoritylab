@@ -44,3 +44,15 @@ report = core.run(
   bypasses authorization and must not be enabled in security-sensitive use.
 - This gate does not isolate handler code, validate cryptographic tokens, or
   make arbitrary handler side effects transactional.
+
+## Existing read-only MCP adapter
+
+The bundled Termux MCP server and its reference example explicitly use
+`legacy_mode=True` because they already implement a separate restricted
+dispatch boundary: only three read-only operations are registered, operation
+names are allow-listed, and payloads/relative paths are validated before the
+handler is called. This compatibility exception is narrower than general
+workflow use, but it does **not** authenticate individual MCP callers. Do not
+reuse this exception for general-purpose or multi-user tools. A future adapter
+revision should pass a verified caller identity and explicit resource scope
+through the new authorization contract.

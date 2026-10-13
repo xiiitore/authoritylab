@@ -32,7 +32,7 @@ class DispatchGateTests(unittest.TestCase):
             list_files=self.list_files,
             read_file=self.read_file,
         )
-        self.core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
+        self.core = WorkflowCore(registry, policy=read_only_mcp_governance_policy(), legacy_mode=True)
 
     def test_allowlisted_operation_returns_verified_output(self) -> None:
         result = dispatch_read_only_mcp_tool(

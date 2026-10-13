@@ -82,6 +82,7 @@ def execute_case(case: dict[str, Any]) -> dict[str, Any]:
             policy=policy,
             verifier=verifier,
             audit_log=audit_log,
+            legacy_mode=True,  # This matrix measures verification, not authorization.
         )
         report = core.run(Task(case["name"], "lookup"))
 

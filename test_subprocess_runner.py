@@ -112,7 +112,7 @@ class SubprocessHandlerRunnerTests(unittest.TestCase):
         registry.register("lambda", lambda task: ToolResult(ok=True, output={"x": 1}), trusted=True)
         policy = GovernancePolicy(evidence_schemas=(EvidenceSchema("lambda", ("x",)),))
         report = WorkflowCore(
-            registry, policy=policy, execution_runner=SubprocessHandlerRunner()
+            registry, policy=policy, execution_runner=SubprocessHandlerRunner(), legacy_mode=True
         ).run(Task("sub-7", "lambda"))
         self.assertEqual(report.status, WorkflowStatus.BLOCKED)
         self.assertEqual(report.checks[0].status, CheckStatus.BLOCKED)
@@ -122,7 +122,7 @@ class SubprocessHandlerRunnerTests(unittest.TestCase):
         registry.register("echo", echo_handler, trusted=True)
         policy = GovernancePolicy(evidence_schemas=(EvidenceSchema("echo", ("task_id", "kind")),))
         report = WorkflowCore(
-            registry, policy=policy, execution_runner=SubprocessHandlerRunner(timeout_seconds=4)
+            registry, policy=policy, execution_runner=SubprocessHandlerRunner(timeout_seconds=4), legacy_mode=True
         ).run(Task("sub-8", "echo"))
         self.assertEqual(report.status, WorkflowStatus.PASS)
         self.assertEqual(report.tool_result.output["task_id"], "sub-8")
