@@ -53,6 +53,25 @@ class GatewayHardeningTests(unittest.TestCase):
         self.assertIsNone(_claims)
         self.assertEqual(reason, "TRUSTED_TIME_UNKNOWN")
 
+    def test_signature_flag_must_be_exact_boolean_true(self):
+        self.verifier.verify_and_extract = lambda _token: VerifiedToken(self.claims, 1)
+        _claims, reason = self.gateway.authorize("token", "read", "DATA_REF_100")
+        self.assertIsNone(_claims)
+        self.assertEqual(reason, "SIGNATURE_NOT_VERIFIED")
+
+    def test_non_boolean_revocation_result_fails_closed(self):
+        uncertain_revocations = type("UncertainRevocations", (), {
+            "is_revoked": lambda *_args: None
+        })()
+        gateway = Gateway(
+            self.verifier, uncertain_revocations, self.clock,
+            issuer="issuer-A", audience="backend-service",
+            allowed_operations={"read"}, permissions={"subject-1": {"read"}},
+        )
+        _claims, reason = gateway.authorize("token", "read", "DATA_REF_100")
+        self.assertIsNone(_claims)
+        self.assertEqual(reason, "REVOCATION_STATUS_UNKNOWN")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
