@@ -44,6 +44,17 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read_root(alias, "note.txt")
 
+    def test_rejects_root_beneath_symlinked_ancestor(self) -> None:
+        alias = Path(self.temp.name) / "ancestor-link"
+        try:
+            alias.symlink_to(self.temp.name, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlink creation is unavailable")
+        redirected_root = alias / self.root.name
+        self.assertFalse(is_confined_directory(redirected_root))
+        with self.assertRaises(OSError):
+            self.read_root(redirected_root, "note.txt")
+
     def read_root(self, root: Path, path: str) -> str:
         return read_confined_text_file(root, path, max_bytes=200_000)
 
