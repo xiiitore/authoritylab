@@ -85,11 +85,23 @@ class Gateway:
         if not isinstance(verified, VerifiedToken) or not verified.signature_verified:
             return None, "SIGNATURE_NOT_VERIFIED"
         c = verified.claims
+        if not isinstance(c, Claims):
+            return None, "CLAIMS_TYPE_INVALID"
+        required_strings = (c.issuer, c.subject, c.audience, c.token_id, c.key_id,
+                            c.nonce, c.request_id, c.target_entity, c.target_operation,
+                            operation, entity)
+        if any(not isinstance(value, str) or not value.strip() for value in required_strings):
+            return None, "CLAIMS_OR_TARGET_MISSING"
         times = (c.issued_at, c.not_before, c.expires_at)
+        if any(not isinstance(t, datetime) for t in times):
+            return None, "TIME_CLAIM_TYPE_INVALID"
         if any(t.tzinfo is None or t.utcoffset() is None for t in times):
             return None, "TIMEZONE_REQUIRED"
-        now = self.clock.now()
-        if now.tzinfo is None or now.utcoffset() is None:
+        try:
+            now = self.clock.now()
+        except Exception:
+            return None, "TRUSTED_TIME_UNKNOWN"
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             return None, "TRUSTED_TIME_INVALID"
         now = now.astimezone(timezone.utc)
         issued, nbf, exp = (t.astimezone(timezone.utc) for t in times)
@@ -234,10 +246,16 @@ class ExecutionCore:
             critic_status = self.critic.audit(request_id=claims.request_id, operation=operation,
                 entity=entity, contract=contract or {}, untrusted_tool_outputs=tool_outputs or [])
         except Exception:
-            self.store.block(claims.request_id, "CRITIC_FAILURE")
+            try:
+                self.store.block(claims.request_id, "CRITIC_FAILURE")
+            except Exception:
+                return Result(Status.UNKNOWN, reason="CRITIC_FAILURE_STATE_UNKNOWN")
             return Result(Status.BLOCKED, reason="CRITIC_FAILURE")
         if critic_status != Status.VALIDATION_PASS:
-            self.store.block(claims.request_id, "CRITIC_REJECTED")
+            try:
+                self.store.block(claims.request_id, "CRITIC_REJECTED")
+            except Exception:
+                return Result(Status.UNKNOWN, reason="CRITIC_REJECTION_STATE_UNKNOWN")
             return Result(Status.BLOCKED, reason="CRITIC_REJECTED")
         try:
             tx_id = self.store.commit(claims.request_id, entity, operation)
