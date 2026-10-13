@@ -14,16 +14,28 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
     if directory is None or nofollow is None:
         raise OSError("Platform lacks required safe directory-open features")
 
-    # abspath normalizes the path without resolving/following symlinks.
+    # Walk from / using held directory descriptors. O_NOFOLLOW on only the
+    # final component is insufficient: an ancestor symlink could redirect the
+    # configured root outside its intended location.
+    if os.open not in os.supports_dir_fd:
+        raise OSError("Platform lacks required safe relative-open features")
     root_path = Path(os.path.abspath(os.fspath(root)))
-    descriptor = os.open(str(root_path), os.O_RDONLY | directory | nofollow)
+    descriptor = os.open(os.sep, os.O_RDONLY | directory)
     try:
+        for component in root_path.parts[1:]:
+            next_descriptor = os.open(
+                component,
+                os.O_RDONLY | directory | nofollow,
+                dir_fd=descriptor,
+            )
+            os.close(descriptor)
+            descriptor = next_descriptor
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
             raise ValueError("Permitted root must be a directory")
+        return descriptor
     except BaseException:
         os.close(descriptor)
         raise
-    return descriptor
 
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
