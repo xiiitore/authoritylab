@@ -1,9 +1,6 @@
-from datetime import datetime
 import unittest
 
-from security_gateway_reference.gateway import (
-    Claims, VerifiedToken, Status, Gateway, ExecutionCore, PassCritic,
-)
+from security_gateway_reference.gateway import Claims, VerifiedToken, Gateway
 from security_gateway_reference.test_gateway import NOW, claims
 
 
