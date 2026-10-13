@@ -207,9 +207,15 @@ class ConfinedReadTests(unittest.TestCase):
                 )
             return real_open(path, flags, *args, **kwargs)
 
-        with patch("authoritylab.secure_paths.os.open", side_effect=require_nonblocking):
-            with self.assertRaisesRegex(ValueError, "regular file"):
-                self.read("pipe.txt")
+        with patch("authoritylab.secure_paths.os.open", side_effect=require_nonblocking) as patched_open:
+            # The implementation intentionally checks os.supports_dir_fd; keep
+            # the wrapped open function advertised as dir_fd-capable in this test.
+            with patch(
+                "authoritylab.secure_paths.os.supports_dir_fd",
+                set(os.supports_dir_fd) | {patched_open},
+            ):
+                with self.assertRaisesRegex(ValueError, "regular file"):
+                    self.read("pipe.txt")
 
     def test_rejects_non_regular_target(self) -> None:
         with self.assertRaises((OSError, ValueError)):
