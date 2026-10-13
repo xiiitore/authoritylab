@@ -82,7 +82,7 @@ class Gateway:
             verified = self.verifier.verify_and_extract(raw_token)
         except Exception:
             return None, "TOKEN_VERIFICATION_FAILED"
-        if not isinstance(verified, VerifiedToken) or not verified.signature_verified:
+        if not isinstance(verified, VerifiedToken) or verified.signature_verified is not True:
             return None, "SIGNATURE_NOT_VERIFIED"
         c = verified.claims
         if not isinstance(c, Claims):
@@ -127,8 +127,11 @@ class Gateway:
         if c.target_operation != operation or c.target_entity != entity:
             return None, "SCOPE_MISMATCH"
         try:
-            if self.revocations.is_revoked(c.issuer, c.token_id, c.key_id):
+            revoked = self.revocations.is_revoked(c.issuer, c.token_id, c.key_id)
+            if revoked is True:
                 return None, "TOKEN_OR_KEY_REVOKED"
+            if revoked is not False:
+                return None, "REVOCATION_STATUS_UNKNOWN"
         except Exception:
             return None, "REVOCATION_STATUS_UNKNOWN"
         return c, None
