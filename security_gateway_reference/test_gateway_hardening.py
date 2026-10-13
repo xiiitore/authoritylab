@@ -1,7 +1,7 @@
 import unittest
 
-from security_gateway_reference.gateway import Claims, VerifiedToken, Gateway
-from security_gateway_reference.test_gateway import NOW, claims
+from .gateway import Claims, VerifiedToken, Gateway
+from .test_gateway import NOW, claims
 
 
 class GatewayHardeningTests(unittest.TestCase):
