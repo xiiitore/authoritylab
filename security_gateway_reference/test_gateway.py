@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from security_gateway_reference.gateway import (
+from .gateway import (
     Claims, VerifiedToken, Status, Gateway, SQLiteStore, ExecutionCore,
     StaticVerifier, StaticRevocations, FixedClock, PassCritic,
 )
@@ -67,6 +67,26 @@ class GatewayTests(unittest.TestCase):
             Claims(**{**self.c.__dict__, "issued_at": NOW+timedelta(minutes=1)}), True)
         self.assertEqual(self.core.execute("expired", "read", "DATA_REF_100").reason, "TOKEN_EXPIRED")
         self.assertEqual(self.core.execute("future", "read", "DATA_REF_100").reason, "ISSUED_IN_FUTURE")
+
+    def test_blank_target_and_malformed_time_claims_blocked(self):
+        self.verifier.tokens["blank-target"] = VerifiedToken(claims(target_entity=" "), True)
+        self.verifier.tokens["naive-time"] = VerifiedToken(
+            Claims(**{**self.c.__dict__, "issued_at": datetime(2026, 10, 13, 9, 59)}), True)
+        self.assertEqual(self.core.execute("blank-target", "read", "DATA_REF_100").reason,
+                         "CLAIMS_OR_TARGET_MISSING")
+        self.assertEqual(self.core.execute("naive-time", "read", "DATA_REF_100").reason,
+                         "TIMEZONE_REQUIRED")
+        self.assertEqual(self.store.effect_count(), 0)
+
+    def test_trusted_clock_failure_fails_closed(self):
+        class BrokenClock:
+            def now(self): raise RuntimeError("clock unavailable")
+        gateway = Gateway(self.verifier, self.revocations, BrokenClock(), issuer="issuer-A",
+            audience="backend-service", allowed_operations={"read"}, permissions={"subject-1": {"read"}})
+        core = ExecutionCore(gateway, PassCritic(), self.store)
+        self.assertEqual(core.execute("token-1", "read", "DATA_REF_100").reason,
+                         "TRUSTED_TIME_UNKNOWN")
+        self.assertEqual(self.store.effect_count(), 0)
 
     def test_unverified_signature_blocked(self):
         self.verifier.tokens["bad-signature"] = VerifiedToken(self.c, False)
