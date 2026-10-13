@@ -118,14 +118,22 @@ def read_confined_text_file(
 
     nofollow = getattr(os, "O_NOFOLLOW", None)
     directory = getattr(os, "O_DIRECTORY", None)
-    if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
+    nonblock = getattr(os, "O_NONBLOCK", None)
+    if (
+        nofollow is None
+        or directory is None
+        or nonblock is None
+        or os.open not in os.supports_dir_fd
+    ):
         raise OSError("Platform lacks required safe relative-open features")
 
     descriptors: list[int] = []
     try:
         descriptors.append(_open_confined_root(root))
         directory_flags = os.O_RDONLY | directory | nofollow
-        file_flags = os.O_RDONLY | nofollow
+        # O_NONBLOCK prevents a FIFO substituted at the target path from
+        # hanging the caller before fstat can reject the non-regular file.
+        file_flags = os.O_RDONLY | nofollow | nonblock
         for component in parts[:-1]:
             descriptors.append(
                 os.open(component, directory_flags, dir_fd=descriptors[-1])
