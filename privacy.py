@@ -1,4 +1,4 @@
-"""Best-effort privacy redaction for audit events.
+""""Best-effort privacy redaction for audit events.
 
 Redaction is a data-minimization layer, not a DLP guarantee. Callers should avoid
 sending secrets or unnecessary personal data into the workflow in the first place.
@@ -29,7 +29,7 @@ _SENSITIVE_TEXT = (
     re.compile(r"\bya29\.[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----.*?-----END (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
-    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|api[_-]?key|token|secret|password)=)[^&#\s]+"),
+    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|client_assertion|api[_-]?key|token|secret|password|authorization|cookie|session(?:_id|id)?|private[_-]?key|signature)=)[^&#\s]+"),
     re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
 )
 
