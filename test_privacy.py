@@ -140,6 +140,21 @@ class PrivacyRedactionTests(unittest.TestCase):
                 self.assertIn("[REDACTED]", result)
         self.assertIn("state=keep-me", redact_text(samples[0]))
 
+    def test_oauth_tokens_in_url_fragments_are_redacted(self):
+        samples = [
+            ("https://example.invalid/callback#access_token=FRAGMENT_ACCESS_SECRET", "FRAGMENT_ACCESS_SECRET"),
+            ("https://example.invalid/callback?state=keep#access_token=FRAGMENT_ACCESS_SECRET", "FRAGMENT_ACCESS_SECRET"),
+            ("https://example.invalid/callback#id_token=FRAGMENT_ID_SECRET&state=keep", "FRAGMENT_ID_SECRET"),
+            ("https://example.invalid/callback#access_token=FRAGMENT_ACCESS_SECRET&state=keep", "FRAGMENT_ACCESS_SECRET"),
+        ]
+        for sample, secret in samples:
+            with self.subTest(sample=sample):
+                result = redact_text(sample)
+                self.assertNotIn(secret, result)
+                self.assertIn("[REDACTED]", result)
+        self.assertIn("state=keep", redact_text(samples[1][0]))
+        self.assertIn("state=keep", redact_text(samples[3][0]))
+
     def test_authentication_codes_and_signed_url_credentials_are_redacted(self):
         samples = [
             ("https://example.invalid/callback?code=OAUTH_CODE_SECRET&state=keep-me", "OAUTH_CODE_SECRET"),
