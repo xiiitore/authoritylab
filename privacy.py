@@ -11,9 +11,9 @@ from typing import Any
 
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY = re.compile(
-    r"(?:^|[_-])(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|"
-    r"private[_-]?key|client[_-]?secret|authorization|cookie|credential|"
-    r"refresh[_-]?token|session[_-]?id)(?:$|[_-])",
+    r"(?:password|passwd|secret|token|apikey|accesskey|privatekey|clientsecret|"
+    r"authorization|cookie|credential|sessionid|email|phone|address|dateofbirth|"
+    r"socialsecurity|ssn|ipaddress|personaldata|userdata|fullname)",
     re.IGNORECASE,
 )
 _SENSITIVE_TEXT = (
@@ -59,7 +59,8 @@ def redact_sensitive_data(value: Any, *, max_depth: int = 20) -> Any:
             cleaned: dict[str, Any] = {}
             for key, child in item.items():
                 safe_key = redact_text(key) if isinstance(key, str) else "[NON_STRING_KEY]"
-                if isinstance(key, str) and _SENSITIVE_KEY.search(key):
+                normalized_key = re.sub(r"[^a-z0-9]", "", key.lower()) if isinstance(key, str) else ""
+                if normalized_key and _SENSITIVE_KEY.search(normalized_key):
                     cleaned[safe_key] = _REDACTED
                 else:
                     cleaned[safe_key] = visit(child, depth + 1)
