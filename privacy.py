@@ -12,7 +12,7 @@ from typing import Any
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY = re.compile(
     r"(?:password|passwd|secret|token|apikey|accesskey|privatekey|clientsecret|"
-    r"authorization|cookie|credential|sessionid|email|phone|address|dateofbirth|"
+    r"authorization|cookie|credential|session|clientassertion|signature|signingkey|sessionid|email|phone|address|dateofbirth|"
     r"socialsecurity|ssn|ipaddress|personaldata|userdata|fullname)",
     re.IGNORECASE,
 )
