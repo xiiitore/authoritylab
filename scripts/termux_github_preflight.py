@@ -7,7 +7,6 @@ Run it from inside the repository: python scripts/termux_github_preflight.py
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
