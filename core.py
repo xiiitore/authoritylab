@@ -179,13 +179,20 @@ class WorkflowCore:
             return blocked(f"authorizer failed ({type(exc).__name__})")
         if not isinstance(decision, AuthorizationDecision):
             return blocked("authorizer returned an invalid decision")
+        # Do not expose arbitrary policy-engine text: it may contain secrets or
+        # personal data. Keep the public report reason controlled and predictable.
+        safe_reason = (
+            "explicit grant matched"
+            if decision.allowed
+            else "authorization denied by policy"
+        )
         detail = {
             "status": "PASS" if decision.allowed else "BLOCKED",
             "decision_id": decision.decision_id,
-            "reason": decision.reason,
+            "reason": safe_reason,
         }
         if not decision.allowed:
-            return CheckResult("authorization", CheckStatus.BLOCKED, decision.reason), detail
+            return CheckResult("authorization", CheckStatus.BLOCKED, safe_reason), detail
         if request.action != task.kind or task.payload.get(request.target_field) != request.resource_id:
             return blocked("authorized scope changed before execution", decision.decision_id)
         return CheckResult(
