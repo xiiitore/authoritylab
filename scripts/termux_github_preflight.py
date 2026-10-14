@@ -38,7 +38,7 @@ def safe_remote(value: str) -> str:
     path = path.removesuffix(".git").strip("/")
     parts = path.split("/")
     if (
-        not host
+        host.lower() not in {"github.com", "ssh.github.com"}
         or not path
         or len(parts) != 2
         or any(part in {"", ".", ".."} for part in parts)
