@@ -12,7 +12,7 @@ from typing import Any
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY = re.compile(
     r"(?:password|passwd|secret|token|apikey|accesskey|privatekey|clientsecret|"
-    r"authorization|cookie|credential|sessionid|clientassertion|signature|"
+    r"authorization|cookie|credential|sessionid|clientassertion|authorizationcode|devicecode|usercode|idtokenhint|requesttoken|xamzcredential|xamzsecuritytoken|jwt|assertion|signature|"
     r"signingkey|secretkey|encryptionkey|email|phone|address|dateofbirth|"
     r"socialsecurity|ssn|ipaddress|personaldata|userdata|fullname)",
     re.IGNORECASE,
@@ -32,7 +32,7 @@ _SENSITIVE_TEXT = (
     re.compile(r"\bya29\.[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----.*?-----END (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
-    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|client_assertion|api[_-]?key|token|secret|password|authorization|cookie|session(?:_id|id)?|private[_-]?key|signature)=)[^&#\s]+"),
+    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|id_token_hint|client_secret|client_assertion|authorization_code|device_code|user_code|code|request_token|x-amz-credential|x-amz-security-token|jwt|assertion|api[_-]?key|token|secret|password|authorization|cookie|session(?:_id|id)?|private[_-]?key|signature)=)[^&#\s]+"),
     re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
 )
 
