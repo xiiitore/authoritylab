@@ -29,7 +29,7 @@ _SENSITIVE_TEXT = (
     re.compile(r"\bya29\.[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----.*?-----END (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
-    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|api[_-]?key|token|secret|password)=)[^&#\\s]+"),
+    re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|api[_-]?key|token|secret|password)=)[^&#\s]+"),
     re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
 )
 
@@ -40,7 +40,9 @@ def redact_text(value: str) -> str:
         raise TypeError("value must be a string")
     result = value
     for pattern in _SENSITIVE_TEXT:
-        if pattern.pattern.startswith("(?i)\\b(password"):
+        if pattern.pattern.startswith("(?i)([?&]"):
+            result = pattern.sub(r"\1[REDACTED]", result)
+        elif pattern.pattern.startswith("(?i)\\b(password"):
             result = pattern.sub(lambda match: match.group(1) + "=[REDACTED]", result)
         elif pattern.pattern.startswith("(?i)(https"):
             result = pattern.sub(r"\1[REDACTED]@", result)
