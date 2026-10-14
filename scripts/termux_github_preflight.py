@@ -48,6 +48,13 @@ def safe_remote(value: str) -> str:
     return f"{host}/{path}"
 
 
+def overall_status(checks: list[dict[str, str]]) -> str:
+    """Only PASS when every mandatory safety precondition passes."""
+    required = ("git", "repository", "branch", "working_tree", "origin")
+    statuses = {check["name"]: check["status"] for check in checks}
+    return "PASS" if all(statuses.get(name) == "PASS" for name in required) else "BLOCKED"
+
+
 def main() -> int:
     report: dict[str, object] = {"checks": []}
     checks: list[dict[str, str]] = report["checks"]  # type: ignore[assignment]
@@ -110,9 +117,7 @@ def main() -> int:
             "detail": "gh CLI not installed; Git SSH or another credential method may still work",
         })
 
-    required = ("git", "repository", "branch", "working_tree", "origin")
-    statuses = {check["name"]: check["status"] for check in checks}
-    overall = "PASS" if all(statuses.get(name) == "PASS" for name in required) else "BLOCKED"
+    overall = overall_status(checks)
     report["overall"] = overall
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0 if overall == "PASS" else 2
