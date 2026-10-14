@@ -52,14 +52,46 @@ class DurableAuditLog:
         self.integrity_key = integrity_key
         self.max_record_bytes = max_record_bytes
 
+    def _open_parent_directory(self, *, create: bool) -> int:
+        """Open each parent directory component without following symlinks."""
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        directory = getattr(os, "O_DIRECTORY", None)
+        if nofollow is None or directory is None or os.open not in os.supports_dir_fd or os.mkdir not in os.supports_dir_fd:
+            raise OSError("Platform lacks required safe directory-open features")
+        flags = os.O_RDONLY | directory | nofollow
+        descriptor = os.open(os.sep, flags)
+        try:
+            components = [part for part in os.path.dirname(self.path).split(os.sep) if part]
+            for component in components:
+                try:
+                    child = os.open(component, flags, dir_fd=descriptor)
+                except FileNotFoundError:
+                    if not create:
+                        raise
+                    try:
+                        os.mkdir(component, 0o700, dir_fd=descriptor)
+                    except FileExistsError:
+                        pass
+                    child = os.open(component, flags, dir_fd=descriptor)
+                if not stat.S_ISDIR(os.fstat(child).st_mode):
+                    os.close(child)
+                    raise ValueError("audit parent path must contain only directories")
+                os.close(descriptor)
+                descriptor = child
+            return descriptor
+        except BaseException:
+            os.close(descriptor)
+            raise
     def append(self, event: Mapping[str, Any]) -> dict[str, str]:
         if not isinstance(event, Mapping):
             raise TypeError("audit event must be a mapping")
-        directory = os.path.dirname(self.path)
-        os.makedirs(directory, exist_ok=True)
-        flags = os.O_CREAT | os.O_RDWR | os.O_APPEND
-        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self.path, flags, 0o600)
+        parent_descriptor = self._open_parent_directory(create=True)
+        flags = os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_CLOEXEC | os.O_NOFOLLOW
+        try:
+            descriptor = os.open(os.path.basename(self.path), flags, 0o600, dir_fd=parent_descriptor)
+        except BaseException:
+            os.close(parent_descriptor)
+            raise
         try:
             metadata = os.fstat(descriptor)
             if not stat.S_ISREG(metadata.st_mode):
@@ -95,13 +127,22 @@ class DurableAuditLog:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
             finally:
                 os.close(descriptor)
+                os.close(parent_descriptor)
 
     def verify(self) -> bool:
-        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(self.path, flags)
+            parent_descriptor = self._open_parent_directory(create=False)
         except FileNotFoundError:
             return True
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        try:
+            descriptor = os.open(os.path.basename(self.path), flags, dir_fd=parent_descriptor)
+        except FileNotFoundError:
+            os.close(parent_descriptor)
+            return True
+        except BaseException:
+            os.close(parent_descriptor)
+            raise
         try:
             metadata = os.fstat(descriptor)
             if not stat.S_ISREG(metadata.st_mode):
@@ -116,6 +157,7 @@ class DurableAuditLog:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
             finally:
                 os.close(descriptor)
+                os.close(parent_descriptor)
 
     def _signature(self, record_with_hash: Mapping[str, Any]) -> str:
         assert self.integrity_key is not None
