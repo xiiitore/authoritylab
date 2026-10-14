@@ -30,7 +30,7 @@ class TermuxMCPAdapterTests(unittest.TestCase):
             list_files=self.list_files,
             read_file=self.read_file,
         )
-        self.core = WorkflowCore(self.registry, policy=read_only_mcp_governance_policy())
+        self.core = WorkflowCore(self.registry, policy=read_only_mcp_governance_policy(), legacy_mode=True)
 
     def test_registers_only_the_three_read_only_tools(self) -> None:
         self.assertEqual(

@@ -81,7 +81,9 @@ register_read_only_mcp_tools(
     list_files=_list_files_impl,
     read_file=_read_file_impl,
 )
-workflow = WorkflowCore(registry, read_only_mcp_governance_policy())
+# This example's dispatch layer separately allow-lists operations and validates
+# read paths; legacy mode is confined to that adapter example.
+workflow = WorkflowCore(registry, read_only_mcp_governance_policy(), legacy_mode=True)
 
 
 def _audit_report(event: Mapping[str, Any]) -> None:

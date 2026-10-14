@@ -43,7 +43,12 @@ def build_server() -> MCPServer:
         ][:100],
         read_file=lambda path: workspace.read_file(path),
     )
-    core = WorkflowCore(registry, policy=read_only_mcp_governance_policy())
+    # This bridge applies its own operation allow-list and validates every payload
+    # before invoking these three read-only handlers. It is a deliberate legacy
+    # adapter boundary, not a general WorkflowCore authorization example.
+    core = WorkflowCore(
+        registry, policy=read_only_mcp_governance_policy(), legacy_mode=True
+    )
     server = MCPServer(
         name="authoritylab-termux",
         version="0.2.5",

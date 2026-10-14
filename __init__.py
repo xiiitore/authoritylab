@@ -1,6 +1,7 @@
 """Evidence-aware workflow orchestration primitives."""
 
 from .audit_log import DurableAuditLog
+from .authorization import AuthorizationDecision, AuthorizationRequest, Authorizer, ExactMatchAuthorizer
 from .core import WorkflowCore
 from .execution import DockerSandboxRunner, ExecutionBlockedError, InProcessRunner, SubprocessHandlerRunner
 from .governance import EvidenceSchema, GovernancePolicy
@@ -9,6 +10,10 @@ from .loop_guardrails import ExecutionClaimAudit, GuardrailFinding, LoopDetector
 from .semantic_validation import SemanticValidationResult, SemanticValidatorRegistry
 
 __all__ = [
+    "AuthorizationDecision",
+    "AuthorizationRequest",
+    "Authorizer",
+    "ExactMatchAuthorizer",
     "CheckResult",
     "CheckStatus",
     "DurableAuditLog",

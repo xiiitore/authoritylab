@@ -3,8 +3,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from authoritylab import DurableAuditLog, EvidenceSchema, GovernancePolicy, Task, ToolResult, WorkflowCore, WorkflowStatus
+from authoritylab import DurableAuditLog, EvidenceSchema, GovernancePolicy, Task, ToolResult, WorkflowStatus
+from authoritylab.core import WorkflowCore as _WorkflowCore
 from authoritylab.tools import ToolRegistry
+
+
+def WorkflowCore(*args, **kwargs):
+    """Legacy-behavior adapter for regression tests; security tests use _WorkflowCore."""
+    kwargs.setdefault("legacy_mode", True)
+    return _WorkflowCore(*args, **kwargs)
 
 
 class AuditIntegrationTests(unittest.TestCase):

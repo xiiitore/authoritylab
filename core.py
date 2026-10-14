@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
 from .audit_log import DurableAuditLog
+from .authorization import AuthorizationDecision, AuthorizationRequest, Authorizer
 from .execution import ExecutionBlockedError, HandlerRunner, InProcessRunner
 from .governance import GovernancePolicy
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
@@ -23,6 +25,8 @@ class WorkflowCore:
         audit_log: DurableAuditLog | None = None,
         execution_runner: HandlerRunner | None = None,
         loop_detector: LoopDetector | None = None,
+        authorizer: Authorizer | None = None,
+        legacy_mode: bool = False,
     ) -> None:
         if audit_log is not None and not isinstance(audit_log, DurableAuditLog):
             raise TypeError("audit_log must be a DurableAuditLog or None")
@@ -30,12 +34,18 @@ class WorkflowCore:
             raise TypeError("execution_runner must provide a callable run method")
         if loop_detector is not None and not isinstance(loop_detector, LoopDetector):
             raise TypeError("loop_detector must be a LoopDetector or None")
+        if authorizer is not None and not callable(getattr(authorizer, "authorize", None)):
+            raise TypeError("authorizer must provide a callable authorize method")
+        if type(legacy_mode) is not bool:
+            raise TypeError("legacy_mode must be a bool")
         self.registry = registry
         self.policy = policy or GovernancePolicy()
         self.verifier = verifier or ResultVerifier()
         self.audit_log = audit_log
         self.execution_runner = execution_runner if execution_runner is not None else InProcessRunner()
         self.loop_detector = loop_detector if loop_detector is not None else LoopDetector()
+        self.authorizer = authorizer
+        self.legacy_mode = legacy_mode
         self._loop_guard_blocked = False
         self._loop_guard_reason: str | None = None
         self._loop_event_counter = 0
@@ -54,7 +64,16 @@ class WorkflowCore:
         self._loop_guard_blocked = False
         self._loop_guard_reason = None
 
-    def run(self, task: Task) -> WorkflowReport:
+    def run(
+        self, task: Task, *, authorization: AuthorizationRequest | None = None
+    ) -> WorkflowReport:
+        if not isinstance(task, Task):
+            raise TypeError("task must be a Task")
+        if not self.legacy_mode:
+            try:
+                task = Task(task.task_id, task.kind, deepcopy(dict(task.payload)))
+            except Exception:
+                raise ValueError("task payload could not be safely snapshotted") from None
         if self._loop_guard_blocked:
             result = ToolResult(ok=False, error="loop guard blocked execution pending observed progress")
             checks = (CheckResult(
@@ -75,6 +94,28 @@ class WorkflowCore:
             audit = self._audit(task, None, outcome, None, checks, WorkflowStatus.BLOCKED)
             return self._finish(task, None, WorkflowStatus.BLOCKED, None, checks, audit)
 
+        authorization_check: CheckResult | None = None
+        authorization_audit: dict[str, str] | None = None
+        if not self.legacy_mode:
+            authorization_check, authorization_audit = self._authorize_task(task, authorization)
+            if authorization_check.status != CheckStatus.PASS:
+                loop_check = self._observe_loop_guard(
+                    task, None,
+                    fallback_error=authorization_check.detail,
+                    fallback_status="blocked",
+                )
+                checks = (authorization_check, loop_check)
+                audit = self._audit(
+                    task, None, "authorization denied or unavailable", None,
+                    checks, WorkflowStatus.BLOCKED,
+                )
+                audit["authorization"] = authorization_audit or {
+                    "status": "BLOCKED", "reason": "authorization unavailable"
+                }
+                return self._finish(
+                    task, None, WorkflowStatus.BLOCKED, None, checks, audit
+                )
+
         try:
             result = self.execution_runner.run(handler, task)
             if not isinstance(result, ToolResult):
@@ -90,8 +131,10 @@ class WorkflowCore:
                 "configured execution backend could not safely accept the task",
             ),)
             loop_check = self._observe_loop_guard(task, result)
-            checks = checks + (loop_check,)
+            checks = ((authorization_check,) if authorization_check is not None else ()) + checks + (loop_check,)
             audit = self._audit(task, task.kind, "execution backend blocked", result, checks, WorkflowStatus.BLOCKED)
+            if authorization_audit is not None:
+                audit["authorization"] = authorization_audit
             return self._finish(task, task.kind, WorkflowStatus.BLOCKED, result, checks, audit)
         except Exception as exc:
             result = ToolResult(
@@ -101,15 +144,54 @@ class WorkflowCore:
 
         checks, status = self.verifier.verify(result, self.policy, task.kind)
         loop_check = self._observe_loop_guard(task, result)
-        checks = checks + (loop_check,)
+        checks = ((authorization_check,) if authorization_check is not None else ()) + checks + (loop_check,)
         if loop_check.status == CheckStatus.BLOCKED:
             status = WorkflowStatus.BLOCKED
         elif loop_check.status == CheckStatus.UNKNOWN and status == WorkflowStatus.PASS:
             status = WorkflowStatus.UNKNOWN
         outcome = "completed" if status == WorkflowStatus.PASS else "completed with non-pass status"
         audit = self._audit(task, task.kind, outcome, result, checks, status)
+        if authorization_audit is not None:
+            audit["authorization"] = authorization_audit
         return self._finish(task, task.kind, status, result, checks, audit)
 
+    def _authorize_task(
+        self, task: Task, request: AuthorizationRequest | None
+    ) -> tuple[CheckResult, dict[str, str]]:
+        def blocked(reason: str, decision_id: str | None = None) -> tuple[CheckResult, dict[str, str]]:
+            detail = {"status": "BLOCKED", "reason": reason}
+            if decision_id:
+                detail["decision_id"] = decision_id
+            return CheckResult("authorization", CheckStatus.BLOCKED, reason), detail
+
+        if self.authorizer is None:
+            return blocked("no authorizer configured; execution denied")
+        if not isinstance(request, AuthorizationRequest):
+            return blocked("a valid authorization request is required")
+        if request.action != task.kind:
+            return blocked("authorization action does not match task kind")
+        if request.target_field not in task.payload or task.payload.get(request.target_field) != request.resource_id:
+            return blocked("authorized resource does not match the task target")
+        try:
+            authorization_task = Task(task.task_id, task.kind, deepcopy(dict(task.payload)))
+            decision = self.authorizer.authorize(authorization_task, request)
+        except Exception as exc:
+            return blocked(f"authorizer failed ({type(exc).__name__})")
+        if not isinstance(decision, AuthorizationDecision):
+            return blocked("authorizer returned an invalid decision")
+        detail = {
+            "status": "PASS" if decision.allowed else "BLOCKED",
+            "decision_id": decision.decision_id,
+            "reason": decision.reason,
+        }
+        if not decision.allowed:
+            return CheckResult("authorization", CheckStatus.BLOCKED, decision.reason), detail
+        if request.action != task.kind or task.payload.get(request.target_field) != request.resource_id:
+            return blocked("authorized scope changed before execution", decision.decision_id)
+        return CheckResult(
+            "authorization", CheckStatus.PASS,
+            "explicit authorization granted for the exact action and resource",
+        ), detail
 
     def _observe_loop_guard(
         self,

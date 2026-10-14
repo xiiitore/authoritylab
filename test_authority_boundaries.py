@@ -32,7 +32,7 @@ class AuthorityBoundaryTests(unittest.TestCase):
             trusted=True,
         )
 
-        report = WorkflowCore(registry, execution_runner=BlockingRunner()).run(
+        report = WorkflowCore(registry, execution_runner=BlockingRunner(), legacy_mode=True).run(
             Task("blocked-1", "sensitive")
         )
 
