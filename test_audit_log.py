@@ -197,5 +197,34 @@ class DurableAuditLogTests(unittest.TestCase):
                 DurableAuditLog(str(path)).verify()
 
 
+    def test_append_rejects_symlinked_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_parent = root / "real"
+            real_parent.mkdir()
+            alias_parent = root / "alias"
+            try:
+                alias_parent.symlink_to(real_parent, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlink creation is unavailable")
+            log = DurableAuditLog(str(alias_parent / "audit.jsonl"))
+            with self.assertRaises(OSError):
+                log.append({"task_id": "must-not-write"})
+            self.assertFalse((real_parent / "audit.jsonl").exists())
+
+    def test_verify_rejects_symlinked_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_parent = root / "real"
+            real_parent.mkdir()
+            (real_parent / "audit.jsonl").write_text("", encoding="utf-8")
+            alias_parent = root / "alias"
+            try:
+                alias_parent.symlink_to(real_parent, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlink creation is unavailable")
+            log = DurableAuditLog(str(alias_parent / "audit.jsonl"))
+            with self.assertRaises(OSError):
+                log.verify()
 if __name__ == "__main__":
     unittest.main()
