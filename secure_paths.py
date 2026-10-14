@@ -8,23 +8,31 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open the configured root itself without following a final symlink."""
+    """Open the configured root without following any symlink component."""
     directory = getattr(os, "O_DIRECTORY", None)
     nofollow = getattr(os, "O_NOFOLLOW", None)
     if directory is None or nofollow is None:
         raise OSError("Platform lacks required safe directory-open features")
+    if os.open not in os.supports_dir_fd:
+        raise OSError("Platform lacks required safe relative-open features")
 
-    # abspath normalizes the path without resolving/following symlinks.
     root_path = Path(os.path.abspath(os.fspath(root)))
-    descriptor = os.open(str(root_path), os.O_RDONLY | directory | nofollow)
+    descriptor = os.open(os.sep, os.O_RDONLY | directory)
     try:
+        for component in root_path.parts[1:]:
+            child = os.open(
+                component,
+                os.O_RDONLY | directory | nofollow,
+                dir_fd=descriptor,
+            )
+            os.close(descriptor)
+            descriptor = child
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
             raise ValueError("Permitted root must be a directory")
+        return descriptor
     except BaseException:
         os.close(descriptor)
         raise
-    return descriptor
-
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
     """Return whether root can be opened as a real directory, not a symlink."""
@@ -106,14 +114,22 @@ def read_confined_text_file(
 
     nofollow = getattr(os, "O_NOFOLLOW", None)
     directory = getattr(os, "O_DIRECTORY", None)
-    if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
+    nonblock = getattr(os, "O_NONBLOCK", None)
+    if (
+        nofollow is None
+        or directory is None
+        or nonblock is None
+        or os.open not in os.supports_dir_fd
+    ):
         raise OSError("Platform lacks required safe relative-open features")
 
     descriptors: list[int] = []
     try:
         descriptors.append(_open_confined_root(root))
         directory_flags = os.O_RDONLY | directory | nofollow
-        file_flags = os.O_RDONLY | nofollow
+        # O_NONBLOCK prevents a FIFO substituted at the target path from
+        # hanging the caller before fstat can reject the non-regular file.
+        file_flags = os.O_RDONLY | nofollow | nonblock
         for component in parts[:-1]:
             descriptors.append(
                 os.open(component, directory_flags, dir_fd=descriptors[-1])

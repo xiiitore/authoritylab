@@ -44,6 +44,17 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read_root(alias, "note.txt")
 
+    def test_rejects_root_beneath_symlinked_ancestor(self) -> None:
+        alias = Path(self.temp.name) / "ancestor-link"
+        try:
+            alias.symlink_to(self.temp.name, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlink creation is unavailable")
+        redirected_root = alias / self.root.name
+        self.assertFalse(is_confined_directory(redirected_root))
+        with self.assertRaises(OSError):
+            self.read_root(redirected_root, "note.txt")
+
     def read_root(self, root: Path, path: str) -> str:
         return read_confined_text_file(root, path, max_bytes=200_000)
 
@@ -174,6 +185,35 @@ class ConfinedReadTests(unittest.TestCase):
         (self.root / "invalid.txt").write_bytes(b"\xff")
         with self.assertRaises(UnicodeDecodeError):
             self.read("invalid.txt")
+
+    def test_fifo_target_is_opened_nonblocking_then_rejected(self) -> None:
+        mkfifo = getattr(os, "mkfifo", None)
+        nonblock = getattr(os, "O_NONBLOCK", None)
+        if not callable(mkfifo) or nonblock is None:
+            self.skipTest("FIFO or non-blocking open is unavailable")
+        fifo = self.root / "pipe.txt"
+        try:
+            mkfifo(fifo)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"FIFO creation is unavailable: {exc}")
+
+        real_open = os.open
+
+        def require_nonblocking(path, flags, *args, **kwargs):
+            if path == "pipe.txt":
+                self.assertNotEqual(
+                    flags & nonblock, 0,
+                    "confined reads must not block while opening a FIFO",
+                )
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch("authoritylab.secure_paths.os.open", side_effect=require_nonblocking) as patched_open:
+            with patch(
+                "authoritylab.secure_paths.os.supports_dir_fd",
+                set(os.supports_dir_fd) | {patched_open},
+            ):
+                with self.assertRaisesRegex(ValueError, "regular file"):
+                    self.read("pipe.txt")
 
     def test_rejects_non_regular_target(self) -> None:
         with self.assertRaises((OSError, ValueError)):
