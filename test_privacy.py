@@ -49,7 +49,7 @@ class PrivacyRedactionTests(unittest.TestCase):
             "npm token npm_123456789012345678901234",
             "PyPI token pypi-123456789012345678901234",
             "Google token ya29.123456789012345678901234",
-            "-----BEGIN ENCRYPTED PRIVATE KEY-----\nprivate-material\n-----END ENCRYPTED PRIVATE KEY-----",
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----\nencrypted-only-material\n-----END ENCRYPTED PRIVATE KEY-----",
             "-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----",
         ]
         for sample in samples:
@@ -67,6 +67,7 @@ class PrivacyRedactionTests(unittest.TestCase):
                 self.assertNotIn("pypi-123456789012345678901234", result)
                 self.assertNotIn("ya29.123456789012345678901234", result)
                 self.assertNotIn("private-material", result)
+                self.assertNotIn("encrypted-only-material", result)
 
     def test_non_json_values_are_not_serialized_with_repr(self):
         class SecretObject:
