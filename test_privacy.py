@@ -140,6 +140,39 @@ class PrivacyRedactionTests(unittest.TestCase):
                 self.assertIn("[REDACTED]", result)
         self.assertIn("state=keep-me", redact_text(samples[0]))
 
+    def test_authentication_codes_and_signed_url_credentials_are_redacted(self):
+        samples = [
+            ("https://example.invalid/callback?code=OAUTH_CODE_SECRET&state=keep-me", "OAUTH_CODE_SECRET"),
+            ("https://example.invalid/callback?authorization_code=AUTH_CODE_SECRET", "AUTH_CODE_SECRET"),
+            ("https://example.invalid/callback?device_code=DEVICE_CODE_SECRET", "DEVICE_CODE_SECRET"),
+            ("https://example.invalid/callback?user_code=USER_CODE_SECRET", "USER_CODE_SECRET"),
+            ("https://example.invalid/callback?id_token_hint=ID_HINT_SECRET", "ID_HINT_SECRET"),
+            ("https://example.invalid/object?X-Amz-Credential=AWS_CREDENTIAL_SECRET", "AWS_CREDENTIAL_SECRET"),
+            ("https://example.invalid/object?X-Amz-Security-Token=AWS_SESSION_SECRET", "AWS_SESSION_SECRET"),
+            ("https://example.invalid/callback?jwt=JWT_SECRET", "JWT_SECRET"),
+        ]
+        for sample, secret in samples:
+            with self.subTest(sample=sample):
+                result = redact_text(sample)
+                self.assertNotIn(secret, result)
+                self.assertIn("[REDACTED]", result)
+        self.assertIn("state=keep-me", redact_text(samples[0][0]))
+
+    def test_authentication_token_mapping_fields_are_redacted(self):
+        value = {
+            "authorization_code": "AUTH_CODE_SECRET",
+            "deviceCode": "DEVICE_CODE_SECRET",
+            "user_code": "USER_CODE_SECRET",
+            "idTokenHint": "ID_HINT_SECRET",
+            "request_token": "REQUEST_TOKEN_SECRET",
+            "x-amz-credential": "AWS_CREDENTIAL_SECRET",
+            "x-amz-security-token": "AWS_SESSION_SECRET",
+            "jwt": "JWT_SECRET",
+        }
+        result = redact_sensitive_data(value)
+        for key in value:
+            self.assertEqual(result[key], "[REDACTED]")
+
     def test_non_json_values_are_not_serialized_with_repr(self):
         class SecretObject:
             def __repr__(self):
