@@ -150,6 +150,9 @@ class PrivacyRedactionTests(unittest.TestCase):
             ("https://example.invalid/object?X-Amz-Credential=AWS_CREDENTIAL_SECRET", "AWS_CREDENTIAL_SECRET"),
             ("https://example.invalid/object?X-Amz-Security-Token=AWS_SESSION_SECRET", "AWS_SESSION_SECRET"),
             ("https://example.invalid/callback?jwt=JWT_SECRET", "JWT_SECRET"),
+            ("https://example.invalid/callback?access%5Ftoken=ENCODED_ACCESS_SECRET", "ENCODED_ACCESS_SECRET"),
+            ("https://example.invalid/callback?client%5Fsecret=ENCODED_CLIENT_SECRET", "ENCODED_CLIENT_SECRET"),
+            ("https://example.invalid/object?X-Amz%2DSecurity%2DToken=ENCODED_AWS_SESSION_SECRET", "ENCODED_AWS_SESSION_SECRET"),
         ]
         for sample, secret in samples:
             with self.subTest(sample=sample):
