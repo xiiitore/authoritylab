@@ -69,6 +69,26 @@ class PrivacyRedactionTests(unittest.TestCase):
                 self.assertNotIn("private-material", result)
                 self.assertNotIn("encrypted-only-material", result)
 
+    def test_sensitive_url_query_parameters_are_redacted(self):
+        samples = [
+            "https://example.invalid/callback?access_token=ACCESS_SECRET&state=keep-me",
+            "https://example.invalid/callback?refresh_token=REFRESH_SECRET",
+            "https://example.invalid/callback?id_token=ID_SECRET",
+            "https://example.invalid/callback?client_secret=CLIENT_SECRET",
+            "https://example.invalid/callback?api_key=API_SECRET",
+            "https://example.invalid/callback?token=TOKEN_SECRET",
+        ]
+        for sample in samples:
+            with self.subTest(sample=sample):
+                result = redact_text(sample)
+                for secret in (
+                    "ACCESS_SECRET", "REFRESH_SECRET", "ID_SECRET",
+                    "CLIENT_SECRET", "API_SECRET", "TOKEN_SECRET",
+                ):
+                    self.assertNotIn(secret, result)
+        self.assertIn("state=keep-me", redact_text(samples[0]))
+        self.assertIn("access_token=[REDACTED]", redact_text(samples[0]))
+
     def test_non_json_values_are_not_serialized_with_repr(self):
         class SecretObject:
             def __repr__(self):
