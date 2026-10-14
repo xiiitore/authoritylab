@@ -97,6 +97,27 @@ class PrivacyRedactionTests(unittest.TestCase):
         self.assertIn("state=keep-me", redact_text(samples[0]))
         self.assertIn("access_token=[REDACTED]", redact_text(samples[0]))
 
+
+    def test_additional_sensitive_url_query_parameters_are_redacted(self):
+        samples = [
+            "https://example.invalid/callback?authorization=AUTH_SECRET&state=keep-me",
+            "https://example.invalid/callback?cookie=COOKIE_SECRET",
+            "https://example.invalid/callback?session_id=SESSION_SECRET",
+            "https://example.invalid/callback?client_assertion=ASSERTION_SECRET",
+            "https://example.invalid/callback?private_key=PRIVATE_KEY_SECRET",
+            "https://example.invalid/callback?signature=SIGNATURE_SECRET",
+        ]
+        secrets = (
+            "AUTH_SECRET", "COOKIE_SECRET", "SESSION_SECRET",
+            "ASSERTION_SECRET", "PRIVATE_KEY_SECRET", "SIGNATURE_SECRET",
+        )
+        for sample, secret in zip(samples, secrets):
+            with self.subTest(sample=sample):
+                result = redact_text(sample)
+                self.assertNotIn(secret, result)
+                self.assertIn("[REDACTED]", result)
+        self.assertIn("state=keep-me", redact_text(samples[0]))
+
     def test_non_json_values_are_not_serialized_with_repr(self):
         class SecretObject:
             def __repr__(self):
