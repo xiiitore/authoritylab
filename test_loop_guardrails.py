@@ -57,6 +57,18 @@ class LoopDetectorTests(unittest.TestCase):
         findings = detector.observe(ToolObservation("search", {"q": "x"}, {"hits": []}))
         self.assertIn("EXACT_REPEAT_NO_PROGRESS", {f.code for f in findings})
 
+    def test_progress_marker_must_be_an_explicit_boolean(self):
+        for invalid in ("false", 1, 0, None, [], {}):
+            with self.subTest(progress=invalid):
+                with self.assertRaises(TypeError):
+                    ToolObservation("tool", {}, {}, progress=invalid)
+
+    def test_event_id_must_be_nonempty_string_or_none(self):
+        for invalid in ("", "   ", 1, False):
+            with self.subTest(event_id=invalid):
+                with self.assertRaises(ValueError):
+                    ToolObservation("tool", {}, {}, event_id=invalid)
+
     def test_non_json_arguments_are_rejected_at_ingestion(self):
         with self.assertRaises(TypeError):
             ToolObservation("tool", object())
