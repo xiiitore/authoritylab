@@ -22,6 +22,28 @@ class PrivacyRedactionTests(unittest.TestCase):
         self.assertEqual(result["task"]["ordinary"], "keep this")
         self.assertEqual(value["task"]["api_key"], "example-secret-value")
 
+    def test_signature_and_client_assertion_mapping_fields_are_redacted(self):
+        value = {
+            "client_assertion": "ASSERTION_SECRET",
+            "clientAssertion": "CAMEL_ASSERTION_SECRET",
+            "signature": "SIGNATURE_SECRET",
+            "signing_key": "SIGNING_KEY_SECRET",
+            "encryptionKey": "ENCRYPTION_KEY_SECRET",
+            "ordinary_signature_label": "also-redacted-by-substring-policy",
+        }
+        result = redact_sensitive_data(value)
+        for key in (
+            "client_assertion", "clientAssertion", "signature",
+            "signing_key", "encryptionKey", "ordinary_signature_label",
+        ):
+            self.assertEqual(result[key], "[REDACTED]")
+        serialized = json.dumps(result)
+        for secret in (
+            "ASSERTION_SECRET", "CAMEL_ASSERTION_SECRET", "SIGNATURE_SECRET",
+            "SIGNING_KEY_SECRET", "ENCRYPTION_KEY_SECRET",
+        ):
+            self.assertNotIn(secret, serialized)
+
     def test_camel_case_credentials_and_personal_data_fields_are_redacted(self):
         result = redact_sensitive_data({
             "apiKey": "key-value",
