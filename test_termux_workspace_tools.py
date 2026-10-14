@@ -141,6 +141,21 @@ class BoundedWorkspaceTests(unittest.TestCase):
 
         self.assertEqual(outside.read_text(encoding="utf-8"), "do not disclose")
 
+
+    def test_read_file_rejects_fifo_without_blocking(self):
+        mkfifo = getattr(os, "mkfifo", None)
+        if not callable(mkfifo):
+            self.skipTest("FIFO creation is unavailable")
+        fifo = self.root / "pipe.txt"
+        try:
+            mkfifo(fifo)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"FIFO creation is unavailable: {type(exc).__name__}")
+
+        with self.assertRaises(WorkspaceError):
+            self.workspace.read_file("pipe.txt")
+
+
     def test_rejects_git_metadata_reads_and_writes(self):
         (self.root / ".git" / "config").write_text("[remote]", encoding="utf-8")
         for path in (".git/config", ".git/hooks/pre-commit", "nested/.git/config"):
