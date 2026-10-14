@@ -26,15 +26,24 @@ def run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def safe_remote(value: str) -> str:
-    """Return only a GitHub host/path; discard userinfo, query, and fragment."""
+    """Return a normalized host/path; never include URL credentials or suffixes."""
     value = value.strip()
     if value.startswith("git@") and ":" in value:
         host, path = value[4:].split(":", 1)
+        # SCP-like SSH remotes do not pass through urlsplit, so strip suffixes here.
+        path = path.split("?", 1)[0].split("#", 1)[0]
     else:
         parsed = urlsplit(value if "://" in value else "https://" + value)
         host, path = parsed.hostname or "", parsed.path.lstrip("/")
     path = path.removesuffix(".git").strip("/")
-    if not host or not path or any(part in {"", ".", ".."} for part in path.split("/")):
+    parts = path.split("/")
+    if (
+        not host
+        or not path
+        or len(parts) != 2
+        or any(part in {"", ".", ".."} for part in parts)
+        or any(char in path for char in ("?", "#", "\\"))
+    ):
         return "configured (unrecognized format; value withheld)"
     return f"{host}/{path}"
 
@@ -66,19 +75,25 @@ def main() -> int:
     checks.append({"name": "repository", "status": "PASS", "detail": str(repo)})
     checks.append({
         "name": "branch",
-        "status": "PASS" if branch.returncode == 0 and branch.stdout.strip() else "WARN",
+        "status": "PASS" if branch.returncode == 0 and branch.stdout.strip() else "FAIL",
         "detail": branch.stdout.strip() or "detached HEAD or branch unavailable",
     })
     checks.append({
         "name": "working_tree",
-        "status": "PASS" if status.returncode == 0 and not status.stdout.strip() else "WARN",
+        "status": "PASS" if status.returncode == 0 and not status.stdout.strip() else "FAIL",
         "detail": "clean" if status.returncode == 0 and not status.stdout.strip() else "uncommitted changes present or status unavailable",
     })
 
     if remote.returncode == 0:
-        checks.append({"name": "origin", "status": "PASS", "detail": safe_remote(remote.stdout)})
+        safe = safe_remote(remote.stdout)
+        recognized = "value withheld" not in safe
+        checks.append({
+            "name": "origin",
+            "status": "PASS" if recognized else "FAIL",
+            "detail": safe,
+        })
     else:
-        checks.append({"name": "origin", "status": "WARN", "detail": "no origin remote configured"})
+        checks.append({"name": "origin", "status": "FAIL", "detail": "no origin remote configured"})
 
     gh = shutil.which("gh")
     if gh:
@@ -95,9 +110,12 @@ def main() -> int:
             "detail": "gh CLI not installed; Git SSH or another credential method may still work",
         })
 
-    report["overall"] = "PASS" if root.returncode == 0 and remote.returncode == 0 else "PARTIAL"
+    required = ("git", "repository", "branch", "working_tree", "origin")
+    statuses = {check["name"]: check["status"] for check in checks}
+    overall = "PASS" if all(statuses.get(name) == "PASS" for name in required) else "BLOCKED"
+    report["overall"] = overall
     print(json.dumps(report, indent=2, ensure_ascii=False))
-    return 0 if report["overall"] == "PASS" else 1
+    return 0 if overall == "PASS" else 2
 
 
 if __name__ == "__main__":
