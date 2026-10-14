@@ -32,7 +32,7 @@ _SENSITIVE_TEXT = (
     re.compile(r"\bya29\.[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----.*?-----END (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
-    re.compile(r"(?i)([?&](?:access(?:_|%5f)token|refresh(?:_|%5f)token|id(?:_|%5f)token|id(?:_|%5f)token(?:_|%5f)hint|client(?:_|%5f)secret|client(?:_|%5f)assertion|authorization(?:_|%5f)code|device(?:_|%5f)code|user(?:_|%5f)code|code|request(?:_|%5f)token|x(?:-|%2d)amz(?:-|%2d)credential|x(?:-|%2d)amz(?:-|%2d)security(?:-|%2d)token|jwt|assertion|api(?:_|%5f|-|%2d)?key|token|secret|password|authorization|cookie|session(?:(?:_|%5f)?id)?|private(?:_|%5f|-|%2d)?key|signature)=)[^&#\s]+"),
+    re.compile(r"(?i)([?#&](?:access(?:_|%5f)token|refresh(?:_|%5f)token|id(?:_|%5f)token|id(?:_|%5f)token(?:_|%5f)hint|client(?:_|%5f)secret|client(?:_|%5f)assertion|authorization(?:_|%5f)code|device(?:_|%5f)code|user(?:_|%5f)code|code|request(?:_|%5f)token|x(?:-|%2d)amz(?:-|%2d)credential|x(?:-|%2d)amz(?:-|%2d)security(?:-|%2d)token|jwt|assertion|api(?:_|%5f|-|%2d)?key|token|secret|password|authorization|cookie|session(?:(?:_|%5f)?id)?|private(?:_|%5f|-|%2d)?key|signature)=)[^&#\s]+"),
     re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
 )
 
