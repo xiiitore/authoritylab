@@ -39,6 +39,10 @@ class PrivacyRedactionTests(unittest.TestCase):
     def test_common_credential_patterns_are_redacted_in_text(self):
         samples = [
             "Authorization: Bearer abcdefghijklmnop",
+            "Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+            "Proxy-Authorization: Basic cHJveHktc2VjcmV0",
+            "Cookie: session=SESSION_SECRET; theme=dark",
+            "Set-Cookie: session=COOKIE_SECRET; HttpOnly; Secure",
             "ghp_" + ("A" * 25),
             "github_pat_" + ("B" * 25),
             "password=hunter2",
@@ -56,6 +60,10 @@ class PrivacyRedactionTests(unittest.TestCase):
             with self.subTest(sample=sample):
                 result = redact_text(sample)
                 self.assertNotIn("abcdefghijklmnop", result)
+                self.assertNotIn("QWxhZGRpbjpvcGVuIHNlc2FtZQ==", result)
+                self.assertNotIn("cHJveHktc2VjcmV0", result)
+                self.assertNotIn("SESSION_SECRET", result)
+                self.assertNotIn("COOKIE_SECRET", result)
                 self.assertNotIn("hunter2", result)
                 self.assertNotIn("user:password", result)
                 self.assertNotIn("ghp_" + ("A" * 25), result)
@@ -88,6 +96,7 @@ class PrivacyRedactionTests(unittest.TestCase):
                     self.assertNotIn(secret, result)
         self.assertIn("state=keep-me", redact_text(samples[0]))
         self.assertIn("access_token=[REDACTED]", redact_text(samples[0]))
+
 
     def test_additional_sensitive_url_query_parameters_are_redacted(self):
         samples = [
