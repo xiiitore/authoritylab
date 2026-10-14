@@ -8,35 +8,31 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open the configured root itself without following a final symlink."""
+    """Open the configured root without following any symlink component."""
     directory = getattr(os, "O_DIRECTORY", None)
     nofollow = getattr(os, "O_NOFOLLOW", None)
     if directory is None or nofollow is None:
         raise OSError("Platform lacks required safe directory-open features")
-
-    # Walk from / using held directory descriptors. O_NOFOLLOW on only the
-    # final component is insufficient: an ancestor symlink could redirect the
-    # configured root outside its intended location.
     if os.open not in os.supports_dir_fd:
         raise OSError("Platform lacks required safe relative-open features")
+
     root_path = Path(os.path.abspath(os.fspath(root)))
     descriptor = os.open(os.sep, os.O_RDONLY | directory)
     try:
         for component in root_path.parts[1:]:
-            next_descriptor = os.open(
+            child = os.open(
                 component,
                 os.O_RDONLY | directory | nofollow,
                 dir_fd=descriptor,
             )
             os.close(descriptor)
-            descriptor = next_descriptor
+            descriptor = child
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
             raise ValueError("Permitted root must be a directory")
         return descriptor
     except BaseException:
         os.close(descriptor)
         raise
-
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
     """Return whether root can be opened as a real directory, not a symlink."""
