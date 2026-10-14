@@ -43,6 +43,9 @@ class PrivacyRedactionTests(unittest.TestCase):
             "github_pat_" + ("B" * 25),
             "password=hunter2",
             "https://user:password@example.com/path",
+            "AWS access key AKIAABCDEFGHIJKLMNOP",
+            "Slack token xoxb-1234567890-abcdefghij",
+            "-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----",
         ]
         for sample in samples:
             with self.subTest(sample=sample):
@@ -52,6 +55,9 @@ class PrivacyRedactionTests(unittest.TestCase):
                 self.assertNotIn("user:password", result)
                 self.assertNotIn("ghp_" + ("A" * 25), result)
                 self.assertNotIn("github_pat_" + ("B" * 25), result)
+                self.assertNotIn("AKIAABCDEFGHIJKLMNOP", result)
+                self.assertNotIn("xoxb-1234567890-abcdefghij", result)
+                self.assertNotIn("private-material", result)
 
     def test_non_json_values_are_not_serialized_with_repr(self):
         class SecretObject:
