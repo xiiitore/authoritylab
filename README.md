@@ -97,6 +97,12 @@ For a container boundary, use `DockerSandboxRunner(image="registry.example/app@s
 
 To persist audit events, construct `DurableAuditLog("/secure/local/path/audit.jsonl")` and pass it as `audit_log=` to `WorkflowCore`. A configured audit write failure changes the workflow status to `BLOCKED`. Hash-chain mode detects record edits/reordering, but a privileged actor able to rewrite the entire file can rebuild the chain. For stronger integrity, provide `DurableAuditLog(path, integrity_key=secret_key)`, where `secret_key` is at least 32 bytes obtained from a secret manager or OS-protected configuration. Never commit the key or store it beside the log. Signed logs cannot be verified or extended without the same key; unsigned and signed records cannot be mixed in one chain. Records are size-bounded, and symbolic-link audit paths are rejected on platforms supporting `O_NOFOLLOW`.
 
+## Privacy-aware audit redaction
+
+`DurableAuditLog.append()` applies `redact_sensitive_data()` before writing an event to disk. The helper recursively redacts common credential-bearing keys (including snake_case and camelCase forms), common personal-data fields such as email, phone, address, date of birth, SSN, and IP address, and selected credential patterns in free text. Non-JSON values are replaced by a type marker rather than serialized with `repr()`, and excessive nesting is truncated to a marker.
+
+This is a best-effort minimization layer, **not a guarantee that all secrets or personal data will be detected**. It does not scan existing audit files, repository history, arbitrary files, network traffic, or model prompts; it does not revoke credentials or change GitHub account settings. Redaction may also remove useful values from audit events. Keep sensitive values out of task payloads where possible, store keys outside the repository, and treat any suspected exposed credential as compromised until it is rotated or revoked. Add targeted tests whenever a new data format or secret type is introduced.
+
 ## Current limitations
 
 - No external plugin integrations, authentication, web API, or distributed execution.
