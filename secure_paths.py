@@ -8,31 +8,38 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open the configured root without following any symlink component."""
+    """Open the configured root and every ancestor without following symlinks."""
     directory = getattr(os, "O_DIRECTORY", None)
     nofollow = getattr(os, "O_NOFOLLOW", None)
-    if directory is None or nofollow is None:
+    if (
+        directory is None
+        or nofollow is None
+        or os.open not in os.supports_dir_fd
+    ):
         raise OSError("Platform lacks required safe directory-open features")
-    if os.open not in os.supports_dir_fd:
-        raise OSError("Platform lacks required safe relative-open features")
 
+    # abspath normalizes dot segments but does not resolve symbolic links.
     root_path = Path(os.path.abspath(os.fspath(root)))
-    descriptor = os.open(os.sep, os.O_RDONLY | directory)
+    flags = os.O_RDONLY | directory | nofollow
+    descriptor = os.open(os.sep, flags)
     try:
+        # Walk from the filesystem root using held directory descriptors.
+        # O_NOFOLLOW therefore applies to every component, not only the leaf.
         for component in root_path.parts[1:]:
-            child = os.open(
-                component,
-                os.O_RDONLY | directory | nofollow,
-                dir_fd=descriptor,
-            )
+            child = os.open(component, flags, dir_fd=descriptor)
+            try:
+                if not stat.S_ISDIR(os.fstat(child).st_mode):
+                    raise ValueError("Permitted root path must contain only directories")
+            except BaseException:
+                os.close(child)
+                raise
             os.close(descriptor)
             descriptor = child
-        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
-            raise ValueError("Permitted root must be a directory")
         return descriptor
     except BaseException:
         os.close(descriptor)
         raise
+
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
     """Return whether root can be opened as a real directory, not a symlink."""
