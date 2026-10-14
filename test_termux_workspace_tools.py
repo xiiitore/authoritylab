@@ -113,6 +113,34 @@ class BoundedWorkspaceTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(WorkspaceError):
                 self.workspace.read_file(path)
 
+
+    def test_read_file_uses_descriptor_based_confined_reader(self):
+        from authoritylab.secure_paths import read_confined_text_file
+
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            wraps=read_confined_text_file,
+        ) as confined_read:
+            self.assertEqual(self.workspace.read_file("README.md"), "hello\n")
+
+        confined_read.assert_called_once_with(
+            self.root.resolve(), "README.md", max_bytes=MAX_FILE_BYTES
+        )
+
+    def test_read_file_rejects_symlink_even_if_path_precheck_is_bypassed(self):
+        outside = Path(self.temp.name) / "outside.txt"
+        outside.write_text("do not disclose", encoding="utf-8")
+        link = self.root / "raced-link.txt"
+        link.symlink_to(outside)
+
+        # Model a race in which the preliminary Path-based check was completed
+        # before a symlink appeared at the same relative path.
+        with patch.object(self.workspace, "_path", return_value=link):
+            with self.assertRaises(WorkspaceError):
+                self.workspace.read_file("raced-link.txt")
+
+        self.assertEqual(outside.read_text(encoding="utf-8"), "do not disclose")
+
     def test_rejects_git_metadata_reads_and_writes(self):
         (self.root / ".git" / "config").write_text("[remote]", encoding="utf-8")
         for path in (".git/config", ".git/hooks/pre-commit", "nested/.git/config"):
