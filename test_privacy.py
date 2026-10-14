@@ -28,12 +28,18 @@ class PrivacyRedactionTests(unittest.TestCase):
             "accessToken": "token-value",
             "emailAddress": "owner@example.invalid",
             "phoneNumber": "+1-555-0100",
+            "clientAssertion": "assertion-secret-value",
+            "signature": "signature-secret-value",
+            "session": "session-secret-value",
             "ordinary_label": "keep",
         })
         self.assertEqual(result["apiKey"], "[REDACTED]")
         self.assertEqual(result["accessToken"], "[REDACTED]")
         self.assertEqual(result["emailAddress"], "[REDACTED]")
         self.assertEqual(result["phoneNumber"], "[REDACTED]")
+        self.assertEqual(result["clientAssertion"], "[REDACTED]")
+        self.assertEqual(result["signature"], "[REDACTED]")
+        self.assertEqual(result["session"], "[REDACTED]")
         self.assertEqual(result["ordinary_label"], "keep")
 
     def test_common_credential_patterns_are_redacted_in_text(self):
