@@ -31,10 +31,16 @@ class ToolObservation:
     event_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.tool_name.strip():
-            raise ValueError("tool_name must be non-empty")
-        if not self.status.strip():
-            raise ValueError("status must be non-empty")
+        if not isinstance(self.tool_name, str) or not self.tool_name.strip():
+            raise ValueError("tool_name must be a non-empty string")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("status must be a non-empty string")
+        if type(self.progress) is not bool:
+            raise TypeError("progress must be a bool")
+        if self.event_id is not None and (
+            not isinstance(self.event_id, str) or not self.event_id.strip()
+        ):
+            raise ValueError("event_id must be a non-empty string or None")
         _fingerprint(self.arguments)
         _fingerprint(self.result)
 
