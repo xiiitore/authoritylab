@@ -16,6 +16,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from .privacy import redact_sensitive_data
+
 _ZERO_HASH = "0" * 64
 _BASE_FIELDS = {"event_id", "recorded_at", "previous_hash", "event", "hash"}
 
@@ -71,7 +73,8 @@ class DurableAuditLog:
                 "event_id": uuid.uuid4().hex,
                 "recorded_at": datetime.now(timezone.utc).isoformat(),
                 "previous_hash": previous_hash,
-                "event": dict(event),
+                # Minimize accidental credential exposure before durable persistence.
+                "event": redact_sensitive_data(event),
             }
             record["hash"] = _digest(record)
             if self.integrity_key is not None:
