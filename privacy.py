@@ -33,7 +33,7 @@ _SENSITIVE_TEXT = (
     re.compile(r"-----BEGIN (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----.*?-----END (?:(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY|ENCRYPTED PRIVATE KEY)-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
     re.compile(r"(?i)([?&](?:access_token|refresh_token|id_token|client_secret|client_assertion|api[_-]?key|token|secret|password|authorization|cookie|session(?:_id|id)?|private[_-]?key|signature)=)[^&#\s]+"),
-    re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
+    re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret|client[_-]?assertion|secret|signature|session(?:_id|id)?|private[_-]?key|authorization|cookie)\s*[:=]\s*[^\s,;]+"),
 )
 
 
