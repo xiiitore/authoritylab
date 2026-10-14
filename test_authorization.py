@@ -97,6 +97,26 @@ class AuthorizationTests(unittest.TestCase):
         self.assertEqual(report.status, WorkflowStatus.BLOCKED)
         self.assertEqual(len(self.calls), 0)
 
+    def test_authorizer_reason_cannot_leak_secrets_into_report(self):
+        class NoisyAuthorizer:
+            def authorize(self, task, request):
+                return AuthorizationDecision(
+                    True, "decision-safe-test",
+                    "Authorization: Bearer verysecretcredentialvalue",
+                )
+
+        core = WorkflowCore(self.registry, authorizer=NoisyAuthorizer())
+        report = core.run(
+            Task("t-secret-reason", "read", {"resource_id": "file-1"}),
+            authorization=self.request(),
+        )
+        self.assertNotIn("verysecretcredentialvalue", str(report.audit))
+        self.assertEqual(
+            report.audit["authorization"]["reason"],
+            "explicit grant matched",
+        )
+        self.assertEqual(len(self.calls), 1)
+
     def test_decision_requires_explicit_boolean(self):
         with self.assertRaises(TypeError):
             AuthorizationDecision(1, "id", "reason")
