@@ -11,6 +11,8 @@ import stat
 import secrets
 from io import BytesIO
 from pathlib import Path, PurePosixPath
+
+from .secure_paths import read_confined_text_file
 from typing import Any
 
 MAX_FILE_BYTES = 200_000
@@ -149,15 +151,21 @@ class BoundedWorkspace:
         return result
 
     def read_file(self, path: str) -> str:
-        target = self._path(path, must_exist=True)
-        if not target.is_file():
-            raise WorkspaceError("path is not a regular file")
-        if target.stat().st_size > MAX_FILE_BYTES:
-            raise WorkspaceError(f"file exceeds {MAX_FILE_BYTES} bytes")
+        # Keep the public workspace policy (including .git exclusion), but do
+        # not trust its path checks as the final filesystem access: a symlink
+        # can be swapped after validation. Re-open every component descriptor-
+        # relatively with O_NOFOLLOW in the confined reader.
+        self._path(path, must_exist=True)
         try:
-            return target.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as exc:
-            raise WorkspaceError(f"file could not be read: {type(exc).__name__}") from None
+            return read_confined_text_file(
+                self.root, path, max_bytes=MAX_FILE_BYTES
+            )
+        except WorkspaceError:
+            raise
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise WorkspaceError(
+                f"file could not be read safely: {type(exc).__name__}"
+            ) from None
 
     def write_file(self, path: str, content: str) -> dict[str, Any]:
         """Atomically replace one bounded regular file without following symlinks."""
