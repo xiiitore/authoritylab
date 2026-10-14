@@ -21,6 +21,9 @@ _SENSITIVE_TEXT = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----", re.DOTALL),
     re.compile(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@"),
     re.compile(r"(?i)\b(password|passwd|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+"),
 )
