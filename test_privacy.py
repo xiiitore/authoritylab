@@ -22,6 +22,20 @@ class PrivacyRedactionTests(unittest.TestCase):
         self.assertEqual(result["task"]["ordinary"], "keep this")
         self.assertEqual(value["task"]["api_key"], "example-secret-value")
 
+    def test_camel_case_credentials_and_personal_data_fields_are_redacted(self):
+        result = redact_sensitive_data({
+            "apiKey": "key-value",
+            "accessToken": "token-value",
+            "emailAddress": "owner@example.invalid",
+            "phoneNumber": "+1-555-0100",
+            "ordinary_label": "keep",
+        })
+        self.assertEqual(result["apiKey"], "[REDACTED]")
+        self.assertEqual(result["accessToken"], "[REDACTED]")
+        self.assertEqual(result["emailAddress"], "[REDACTED]")
+        self.assertEqual(result["phoneNumber"], "[REDACTED]")
+        self.assertEqual(result["ordinary_label"], "keep")
+
     def test_common_credential_patterns_are_redacted_in_text(self):
         samples = [
             "Authorization: Bearer abcdefghijklmnop",
