@@ -7,3 +7,14 @@ venv/
 .coverage
 build/
 dist/
+
+# Local credentials, private keys, and generated audit data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.secrets/
+secrets/
+audit*.jsonl
+*.audit.jsonl
