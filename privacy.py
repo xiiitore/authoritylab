@@ -1,4 +1,4 @@
-""""Best-effort privacy redaction for audit events.
+"""Best-effort privacy redaction for audit events.
 
 Redaction is a data-minimization layer, not a DLP guarantee. Callers should avoid
 sending secrets or unnecessary personal data into the workflow in the first place.
@@ -18,6 +18,8 @@ _SENSITIVE_KEY = re.compile(
 )
 _SENSITIVE_TEXT = (
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"(?i)\b(?:authorization|proxy-authorization)\s*:\s*basic\s+[^\s,;]+"),
+    re.compile(r"(?im)\b(?:set-cookie|cookie)\s*:\s*[^\r\n]+"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
