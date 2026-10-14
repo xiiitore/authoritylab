@@ -53,7 +53,7 @@ def redact_sensitive_data(value: Any, *, max_depth: int = 20) -> Any:
         raise ValueError("max_depth must be a positive integer")
 
     def visit(item: Any, depth: int) -> Any:
-        if depth > max_depth:
+        if depth >= max_depth:
             return "[MAX_DEPTH_REDACTED]"
         if isinstance(item, Mapping):
             cleaned: dict[str, Any] = {}
