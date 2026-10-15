@@ -43,7 +43,7 @@ def redact_text(value: str) -> str:
         raise TypeError("value must be a string")
     result = value
     for pattern in _SENSITIVE_TEXT:
-        if pattern.pattern.startswith("(?i)([?&]"):
+        if pattern.pattern.startswith("(?i)([?#&]"):
             result = pattern.sub(r"\1[REDACTED]", result)
         elif pattern.pattern.startswith("(?i)\\b(password"):
             result = pattern.sub(lambda match: match.group(1) + "=[REDACTED]", result)
