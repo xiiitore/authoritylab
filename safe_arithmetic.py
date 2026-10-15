@@ -34,6 +34,15 @@ _FUNCS.update(abs=abs, round=round, min=min, max=max)
 _CONSTS = {"pi": math.pi, "e": math.e}
 
 
+def _is_finite_number(value: object) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def safe_eval(expression: str) -> float:
     """Evaluate bounded arithmetic expressions; reject all other Python syntax."""
     if not isinstance(expression, str):
@@ -83,24 +92,24 @@ def safe_eval(expression: str) -> float:
             raise ValueError("result is not numeric")
         if isinstance(value, int) and value.bit_length() > MAX_INTEGER_BITS:
             raise ValueError("result is too large")
-        if not math.isfinite(value):
+        if not _is_finite_number(value):
             raise ValueError("result is not finite")
         return value
 
     try:
         return evaluate(tree)
-    except (ArithmeticError, OverflowError) as exc:
+    except (ArithmeticError, OverflowError, TypeError) as exc:
         raise ValueError("arithmetic evaluation failed") from exc
 
 
 def check_number(expression: str, claimed: int | float, rel_tol: float = 1e-6) -> dict[str, object]:
     """Recompute an expression and compare it with a finite claimed result."""
-    if isinstance(claimed, bool) or not isinstance(claimed, (int, float)) or not math.isfinite(claimed):
+    if not _is_finite_number(claimed):
         raise ValueError("claimed result must be a finite number")
     if (
         isinstance(rel_tol, bool)
         or not isinstance(rel_tol, (int, float))
-        or not math.isfinite(rel_tol)
+        or not _is_finite_number(rel_tol)
         or rel_tol < 0
         or rel_tol > 1
     ):
