@@ -150,7 +150,9 @@ class DurableTaskQueue:
                 VALUES (?, ?, ?, 'pending', 0, ?, ?, ?, ?)""",
                 (identifier, kind.strip(), payload_json, max_attempts, ready_at, now, now),
             )
-            row = connection.execute("SELECT * FROM tasks WHERE task_id=?", (identifier,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (identifier,)
+            ).fetchone()
             connection.commit()
         return self._decode(row)
 
@@ -187,7 +189,9 @@ class DurableTaskQueue:
                    WHERE task_id=?""",
                 (worker_id.strip(), now + lease, now, task_id),
             )
-            claimed = connection.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+            claimed = connection.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
             connection.commit()
         return self._decode(claimed)
 
@@ -208,7 +212,9 @@ class DurableTaskQueue:
                 f"UPDATE tasks SET {assignments}, updated_at=? WHERE task_id=?",
                 (*values, now, task_id),
             )
-            updated = connection.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+            updated = connection.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
             connection.commit()
         return self._decode(updated)
 
@@ -263,7 +269,9 @@ class DurableTaskQueue:
                 ("pending" if retry else "failed", now + delay if retry else now,
                  error.strip()[:2000], now, task_id),
             )
-            updated = connection.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+            updated = connection.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
             connection.commit()
         return self._decode(updated)
 
