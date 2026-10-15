@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from task_queue import DurableTaskQueue, LeaseLost
+from authoritylab.task_queue import DurableTaskQueue, LeaseLost
 
 
 class Clock:
