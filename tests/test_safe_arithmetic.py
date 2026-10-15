@@ -27,7 +27,7 @@ class SafeArithmeticTests(unittest.TestCase):
                 safe_eval(expression)
 
     def test_rejects_non_finite_and_arithmetic_errors(self):
-        for expression in ("1e309", "exp(10000)", "1 / 0", "sqrt(-1)"):
+        for expression in ("1e309", "exp(10000)", "1 / 0", "sqrt(-1)", "sqrt()"):
             with self.subTest(expression=expression), self.assertRaises(ValueError):
                 safe_eval(expression)
 
@@ -38,7 +38,7 @@ class SafeArithmeticTests(unittest.TestCase):
     def test_check_number_and_tolerance_validation(self):
         self.assertTrue(check_number("2 + 2", 4)["match"])
         self.assertFalse(check_number("2 + 2", 5)["match"])
-        for claimed in (True, float("nan"), float("inf"), "2"):
+        for claimed in (True, float("nan"), float("inf"), "2", 10**10000):
             with self.subTest(claimed=claimed), self.assertRaises(ValueError):
                 check_number("2", claimed)  # type: ignore[arg-type]
         for tolerance in (-1, float("nan"), float("inf"), 2, True):
