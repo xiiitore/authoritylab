@@ -34,3 +34,12 @@ Review date: 2026-10-15
 ## Evidence labels
 
 Use **PASS** only for directly observed controls, **USER-REPORTED** for owner statements not independently verified, **BLOCKER** for a missing required control, and **UNKNOWN** when the available integration cannot inspect a setting. Record the date and exact check for future reviews.
+
+
+## Current-tree content scan — 2026-10-15
+
+- Method: retrieved the complete non-binary Git tree for `main` and inspected every returned text/config/test blob with targeted patterns for private-key headers, common GitHub/AWS/Slack token formats, credential-bearing URLs, and quoted secret assignments; also checked for non-placeholder email-like strings and Termux home paths.
+- Scope: all 71 non-binary/text-like files in the observed `main` tree; the GitHub tree response was not truncated and no blob retrieval errors were reported.
+- Result: no token/key/credential finding was confirmed as a live secret. Pattern matches were confined to test fixtures that deliberately contain fake private-key text, fake AWS/Slack tokens, and credential-bearing example URLs for redaction/preflight tests. Email-pattern matches were placeholder/test data, including `owner@example.invalid` and a URL fixture matched as an email by the simple pattern. No Termux home path was found in the public target tree.
+- Source repositories: `xiiitore/xiii` — 10 text files scanned, no targeted pattern hits; `xiiitore/authority-boundary-lab` — 24 text files scanned, no token/key/credential-pattern hits. The private source does contain local Termux paths in coordination handoff documentation and an owner contact email in its private plugin manifest; these files must remain private and must not be copied into this public repository.
+- Limitations: this is a current-tree, pattern-based scan, not Git-history scanning, entropy-based detection, provider-side secret scanning, or a guarantee that all sensitive data has been found. History and provider settings remain **UNKNOWN / NOT COMPLETED**.
