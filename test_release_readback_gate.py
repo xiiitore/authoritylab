@@ -1,6 +1,6 @@
 import unittest
 
-from release_readback_gate import assess_readback
+from authoritylab.release_readback_gate import assess_readback
 
 
 BASE = dict(
