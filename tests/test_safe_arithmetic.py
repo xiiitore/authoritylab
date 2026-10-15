@@ -38,7 +38,7 @@ class SafeArithmeticTests(unittest.TestCase):
     def test_check_number_and_tolerance_validation(self):
         self.assertTrue(check_number("2 + 2", 4)["match"])
         self.assertFalse(check_number("2 + 2", 5)["match"])
-        for claimed in (True, float("nan"), float("inf"), "2", 10**10000):
+        for claimed in (True, float("nan"), float("inf"), "2", 10**1000):
             with self.subTest(claimed=claimed), self.assertRaises(ValueError):
                 check_number("2", claimed)  # type: ignore[arg-type]
         for tolerance in (-1, float("nan"), float("inf"), 2, True):
