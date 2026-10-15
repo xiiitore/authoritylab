@@ -12,6 +12,7 @@ import hmac
 import json
 import os
 import stat
+import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Mapping
@@ -59,9 +60,37 @@ class DurableAuditLog:
         if nofollow is None or directory is None or os.open not in os.supports_dir_fd or os.mkdir not in os.supports_dir_fd:
             raise OSError("Platform lacks required safe directory-open features")
         flags = os.O_RDONLY | directory | nofollow
-        descriptor = os.open(os.sep, flags)
+        start = os.sep
         try:
-            components = [part for part in os.path.dirname(self.path).split(os.sep) if part]
+            descriptor = os.open(start, flags)
+        except PermissionError:
+            # Termux may deny opening "/" while allowing its private app root.
+            base_prefix = os.path.abspath(getattr(sys, "base_prefix", sys.prefix))
+            prefix_parts = [part for part in base_prefix.split(os.sep) if part]
+            if len(prefix_parts) < 2 or prefix_parts[-2:] != ["files", "usr"]:
+                raise
+            sandbox_root = os.path.abspath(os.path.dirname(os.path.dirname(base_prefix)))
+            parent_path = os.path.dirname(self.path)
+            try:
+                inside_sandbox = (
+                    os.path.commonpath((parent_path, sandbox_root)) == sandbox_root
+                )
+            except ValueError:
+                inside_sandbox = False
+            if not inside_sandbox:
+                raise PermissionError(
+                    "audit path is outside the accessible Termux sandbox"
+                ) from None
+            descriptor = os.open(sandbox_root, flags)
+            start = sandbox_root
+        try:
+            parent_path = os.path.dirname(self.path)
+            relative_parent = os.path.relpath(parent_path, start)
+            components = (
+                []
+                if relative_parent == os.curdir
+                else [part for part in relative_parent.split(os.sep) if part]
+            )
             for component in components:
                 try:
                     child = os.open(component, flags, dir_fd=descriptor)
