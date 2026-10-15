@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from safe_arithmetic import check_number, safe_eval
+from authoritylab.safe_arithmetic import check_number, safe_eval
 
 
 class SafeArithmeticTests(unittest.TestCase):
