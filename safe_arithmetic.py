@@ -43,7 +43,7 @@ def _is_finite_number(value: object) -> bool:
         return False
 
 
-def safe_eval(expression: str) -> float:
+def safe_eval(expression: str) -> int | float:
     """Evaluate bounded arithmetic expressions; reject all other Python syntax."""
     if not isinstance(expression, str):
         raise TypeError("expression must be text")
