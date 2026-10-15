@@ -16,6 +16,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from authoritylab.privacy import redact_sensitive_data
+
 
 class QueueError(RuntimeError):
     """Base error for task queue operations."""
@@ -267,7 +269,7 @@ class DurableTaskQueue:
                 """UPDATE tasks SET status=?, available_at=?, last_error=?,
                    lease_owner=NULL, lease_expires_at=NULL, updated_at=? WHERE task_id=?""",
                 ("pending" if retry else "failed", now + delay if retry else now,
-                 error.strip()[:2000], now, task_id),
+                 str(redact_sensitive_data(error.strip()))[:2000], now, task_id),
             )
             updated = connection.execute(
                 "SELECT * FROM tasks WHERE task_id=?", (task_id,)
