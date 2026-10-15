@@ -88,6 +88,18 @@ class DurableTaskQueueTests(unittest.TestCase):
         with self.assertRaises(LeaseLost):
             self.queue.heartbeat(task.task_id, "worker", lease_seconds=10)
 
+    def test_error_text_is_redacted_before_persistence(self):
+        task = self.queue.enqueue("test", {})
+        self.queue.claim("worker")
+        failed = self.queue.fail(
+            task.task_id,
+            "worker",
+            "Authorization: Bearer abcdefghijklmnop",
+            retryable=False,
+        )
+        self.assertNotIn("abcdefghijklmnop", failed.last_error)
+        self.assertIn("[REDACTED]", failed.last_error)
+
     def test_invalid_lease_and_retry_delay_are_rejected(self):
         with self.assertRaises(ValueError):
             self.queue.claim("worker", lease_seconds=float("nan"))
