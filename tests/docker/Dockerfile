@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /src
 COPY . /src
 RUN python -m pip install --no-cache-dir /src \
-    && mkdir -p /opt/authoritylab-test \
-    && cp /src/tests/docker/test_docker_runtime_integration.py /opt/authoritylab-test/test_docker_runtime_integration.py \
+    && mkdir -p /opt/authoritylab-test/tests/docker \
+    && cp /src/tests/docker/test_docker_runtime_integration.py /opt/authoritylab-test/tests/docker/test_docker_runtime_integration.py \
+    && touch /opt/authoritylab-test/tests/__init__.py /opt/authoritylab-test/tests/docker/__init__.py \
     && chmod 0777 /opt/authoritylab-test
 WORKDIR /opt/authoritylab-test
