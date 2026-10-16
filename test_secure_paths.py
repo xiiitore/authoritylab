@@ -55,6 +55,32 @@ class ConfinedReadTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read_root(redirected_root, "note.txt")
 
+    def test_termux_anchor_rejects_symlinked_ancestor(self) -> None:
+        # Simulate Termux PREFIX and its app-data anchor on a regular host.
+        app_data = Path(self.temp.name) / "app-data"
+        real_root = app_data / "real" / "share"
+        real_root.mkdir(parents=True)
+        (real_root / "note.txt").write_text("anchored", encoding="utf-8")
+        prefix = app_data / "files" / "usr"
+        prefix.mkdir(parents=True)
+        alias = app_data / "ancestor-link"
+        try:
+            alias.symlink_to(real_root.parent, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlink creation is unavailable")
+
+        with patch.dict(os.environ, {"PREFIX": str(prefix)}):
+            self.assertTrue(is_confined_directory(real_root))
+            self.assertEqual(
+                read_confined_text_file(real_root, "note.txt", max_bytes=100),
+                "anchored",
+            )
+            self.assertFalse(is_confined_directory(alias / "share"))
+            with self.assertRaises(OSError):
+                read_confined_text_file(
+                    alias / "share", "note.txt", max_bytes=100
+                )
+
     def read_root(self, root: Path, path: str) -> str:
         return read_confined_text_file(root, path, max_bytes=200_000)
 
