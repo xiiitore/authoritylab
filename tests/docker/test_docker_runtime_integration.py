@@ -1,4 +1,4 @@
-"""Real Docker integration tests; skipped unless CI supplies a digest-pinned image."""
+""""Real Docker integration tests; skipped unless CI supplies a digest-pinned image."""
 from __future__ import annotations
 
 import os
@@ -65,7 +65,7 @@ class DockerRuntimeIntegrationTests(unittest.TestCase):
 
     def test_real_container_executes_handler_and_preserves_json_result(self):
         result = self.runner.run(echo_handler, Task("integration-1", "echo"))
-        self.assertTrue(result.ok, result.error)
+        self.assertTrue(result.ok, f"{result.error}; handler_module={echo_handler.__module__}")
         self.assertEqual(result.output, {"task_id": "integration-1", "kind": "echo"})
 
     def test_real_container_enforces_non_root_read_only_no_network_and_no_host_access(self):
@@ -77,7 +77,7 @@ class DockerRuntimeIntegrationTests(unittest.TestCase):
                     inspect_container_handler,
                     Task("integration-2", "inspect", {"host_path": host_file.name}),
                 )
-        self.assertTrue(result.ok, result.error)
+        self.assertTrue(result.ok, f"{result.error}; handler_module={inspect_container_handler.__module__}")
         self.assertEqual(
             result.output,
             {
@@ -92,7 +92,11 @@ class DockerRuntimeIntegrationTests(unittest.TestCase):
     def test_real_container_timeout_stops_execution(self):
         result = self.runner.run(sleep_handler, Task("integration-3", "sleep"))
         self.assertFalse(result.ok)
-        self.assertEqual(result.error, "sandbox handler execution timed out")
+        self.assertEqual(
+            result.error,
+            "sandbox handler execution timed out",
+            f"handler_module={sleep_handler.__module__}",
+        )
 
 
 if __name__ == "__main__":
