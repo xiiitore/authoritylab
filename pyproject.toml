@@ -19,3 +19,6 @@ test = ["pytest>=8,<9", "flake8>=7,<8", "jsonschema>=4.23,<5"]
 [tool.setuptools]
 packages = ["authoritylab"]
 package-dir = { "authoritylab" = "." }
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
