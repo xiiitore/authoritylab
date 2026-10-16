@@ -42,6 +42,23 @@ class DurableTaskQueueTests(unittest.TestCase):
         reopened.complete(task.task_id, "worker-b", {"ok": True})
         self.assertEqual(reopened.get(task.task_id).status, "succeeded")
 
+    def test_same_worker_stale_attempt_cannot_complete_reclaimed_task(self):
+        task = self.queue.enqueue("build", {}, max_attempts=3)
+        first_attempt = self.queue.claim("worker-a", lease_seconds=5)
+        self.assertEqual(first_attempt.attempt_count, 1)
+
+        self.clock.advance(6)
+        second_attempt = self.queue.claim("worker-a", lease_seconds=10)
+        self.assertEqual(second_attempt.attempt_count, 2)
+
+        # The first attempt must not be able to complete the second attempt's lease.
+        with self.assertRaises(LeaseLost):
+            self.queue.complete(task.task_id, "worker-a", {"source": "stale attempt"})
+
+        current = self.queue.get(task.task_id)
+        self.assertEqual(current.status, "running")
+        self.assertEqual(current.attempt_count, 2)
+
     def test_only_one_worker_can_claim_task(self):
         self.queue.enqueue("test", {})
         self.assertIsNotNone(self.queue.claim("worker-a"))
@@ -80,6 +97,25 @@ class DurableTaskQueueTests(unittest.TestCase):
             self.queue.enqueue("test", {}, max_attempts=0)
         with self.assertRaises(TypeError):
             self.queue.checkpoint("missing", "worker", ["not", "an", "object"])
+
+    def test_rejects_oversized_json_payload_checkpoint_and_result(self):
+        # Queue contract: JSON payloads/checkpoints/results are limited to 1 MB
+        # after UTF-8 encoding, before being persisted to SQLite.
+        oversized = {"blob": "x" * 1_000_001}
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            self.queue.enqueue("oversized", oversized)
+
+        task = self.queue.enqueue("bounded", {})
+        self.queue.claim("worker")
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            self.queue.checkpoint(task.task_id, "worker", oversized)
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            self.queue.complete(task.task_id, "worker", oversized)
+
+        # Rejected data must not have changed the live task state.
+        current = self.queue.get(task.task_id)
+        self.assertEqual(current.status, "running")
+        self.assertIsNone(current.result)
 
     def test_expired_lease_cannot_be_renewed(self):
         task = self.queue.enqueue("test", {})
