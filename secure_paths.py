@@ -17,9 +17,36 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
         raise OSError("Platform lacks required safe relative-open features")
 
     root_path = Path(os.path.abspath(os.fspath(root)))
-    descriptor = os.open(os.sep, os.O_RDONLY | directory)
+
+    # Android/Termux may deny opening "/" even though paths inside the app
+    # sandbox are accessible. In that environment PREFIX normally ends in
+    # "<app-data>/files/usr"; use the app-data directory as the traversal
+    # anchor when root is lexically beneath it. The anchor is opened with
+    # O_NOFOLLOW, then every component below it is opened relative to a held
+    # descriptor with O_NOFOLLOW. This preserves checks for symlinked roots
+    # and ancestors inside the app sandbox without opening "/".
+    anchor = None
+    components = root_path.parts[1:]
+    prefix = os.environ.get("PREFIX")
+    if prefix:
+        prefix_path = Path(os.path.abspath(prefix))
+        candidate_anchor = prefix_path.parent.parent
+        try:
+            relative_root = root_path.relative_to(candidate_anchor)
+        except ValueError:
+            pass
+        else:
+            anchor = candidate_anchor
+            components = relative_root.parts
+
+    if anchor is None:
+        descriptor = os.open(os.sep, os.O_RDONLY | directory)
+    else:
+        descriptor = os.open(
+            str(anchor), os.O_RDONLY | directory | nofollow
+        )
     try:
-        for component in root_path.parts[1:]:
+        for component in components:
             child = os.open(
                 component,
                 os.O_RDONLY | directory | nofollow,
