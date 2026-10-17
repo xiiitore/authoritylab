@@ -40,7 +40,7 @@ class BrokerTests(unittest.TestCase):
         def submitter():
             try:
                 got["result"] = broker.submit("status", {}, timeout=2.0)
-            except Exception as exc:  # captured for assertion in test thread
+            except Exception as exc:
                 got["error"] = exc
 
         thread = threading.Thread(target=submitter)
@@ -90,13 +90,33 @@ class HttpIntegrationTests(unittest.TestCase):
             body = response.read()
             return response.status, json.loads(body) if body else None
 
-    def test_auth_required(self):
+    def test_agent_auth_required(self):
         req = urllib.request.Request(
             self.base + "/agent/next", headers={"Authorization": "Bearer wrong"}
         )
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             urllib.request.urlopen(req, timeout=2.0)
         self.assertEqual(ctx.exception.code, 401)
+
+    def test_client_auth_required(self):
+        req = urllib.request.Request(
+            self.base + "/mcp", data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+            headers={"Authorization": "Bearer wrong", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2.0)
+        self.assertEqual(ctx.exception.code, 401)
+
+    def test_oversized_request_rejected(self):
+        req = urllib.request.Request(
+            self.base + "/mcp", data=b"x" * (64 * 1024 + 1),
+            headers={"Authorization": "Bearer " + CLIENT_TOKEN, "Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=2.0)
+        self.assertEqual(ctx.exception.code, 400)
 
     def test_tools_list_is_read_only(self):
         status, body = self.call("/mcp", CLIENT_TOKEN, {
@@ -110,7 +130,7 @@ class HttpIntegrationTests(unittest.TestCase):
         result_box = {}
 
         def fake_agent():
-            status, body = self.call("/agent/next", AGENT_TOKEN)
+            _, body = self.call("/agent/next", AGENT_TOKEN)
             task = body["request"]
             result_box["id"] = task["id"]
             self.call("/agent/result", AGENT_TOKEN, {
@@ -136,6 +156,13 @@ class HttpIntegrationTests(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertTrue(body["result"]["isError"])
+
+    def test_unknown_method_returns_jsonrpc_error(self):
+        status, body = self.call("/mcp", CLIENT_TOKEN, {
+            "jsonrpc": "2.0", "id": 3, "method": "not/a/method"
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(body["error"]["code"], -32601)
 
 
 if __name__ == "__main__":
