@@ -29,6 +29,29 @@ MAX_WRITE_BYTES = 30_000
 MAX_COMMENT_PAGES = 20
 ALLOWED_ACTIONS = frozenset({"status", "list_files", "read_file", "git_status", "git_diff", "run_tests", "write_file"})
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$")
+SENSITIVE_PATH_COMPONENT_RE = re.compile(
+    r"(?i)(?:^|[._-])(?:secret|secrets|credential|credentials|token|tokens|"
+    r"password|passwd|private[_-]?key|id_rsa|id_ed25519)(?:$|[._-])"
+)
+SENSITIVE_PATH_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"})
+SENSITIVE_PATH_NAMES = frozenset({
+    ".netrc", ".npmrc", ".pypirc", ".git-credentials",
+    "credentials", "credentials.json", "secrets.json",
+})
+
+
+def _is_sensitive_workspace_path(path: str) -> bool:
+    """Conservatively deny common credential-bearing paths from mailbox I/O."""
+    normalized = path.replace("\\\\", "/")
+    for component in normalized.split("/"):
+        name = component.casefold()
+        if name.startswith(".env") or name in SENSITIVE_PATH_NAMES:
+            return True
+        if any(name.endswith(suffix) for suffix in SENSITIVE_PATH_SUFFIXES):
+            return True
+        if SENSITIVE_PATH_COMPONENT_RE.search(name):
+            return True
+    return False
 
 
 class MailboxError(Exception):
@@ -64,6 +87,8 @@ def parse_task(body: str) -> dict[str, Any]:
         if (not path or len(path) > 1024 or "\x00" in path
                 or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
             raise MailboxError("read_file_path_invalid")
+        if _is_sensitive_workspace_path(path):
+            raise MailboxError("read_file_sensitive_path_denied")
     if task["action"] == "write_file":
         if set(task["arguments"]) != {"path", "content"}:
             raise MailboxError("write_file_arguments_invalid")
@@ -75,6 +100,8 @@ def parse_task(body: str) -> dict[str, Any]:
         if (not path or len(path) > 1024 or "\x00" in path
                 or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
             raise MailboxError("write_file_path_invalid")
+        if _is_sensitive_workspace_path(path):
+            raise MailboxError("write_file_sensitive_path_denied")
         try:
             content_bytes = content.encode("utf-8")
         except UnicodeEncodeError:
