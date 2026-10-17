@@ -60,8 +60,8 @@ class RequestBroker:
             if set(arguments) != {"path"} or not isinstance(arguments.get("path"), str):
                 raise RelayError("invalid_arguments")
             path = arguments["path"]
-            normalized = path.replace("\\\\", "/")
-            if (not path or len(path) > 1024 or "\\x00" in path
+            normalized = path.replace(chr(92), "/")
+            if (not path or len(path) > 1024 or chr(0) in path
                     or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
                 raise RelayError("invalid_arguments")
         request_id = secrets.token_urlsafe(24)
