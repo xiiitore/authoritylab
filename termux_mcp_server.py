@@ -1,4 +1,4 @@
-"""Read-only MCP stdio bridge governed by AuthorityLab WorkflowCore."""
+"""Read-only MCP stdio bridge using bounded workspace operations directly."""
 from __future__ import annotations
 
 import json
@@ -11,64 +11,77 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from authoritylab.core import WorkflowCore
-from authoritylab.tools import ToolRegistry
 from authoritylab.termux_workspace_tools import BoundedWorkspace
-from authoritylab.termux_mcp_adapter import (
-    MCPAdapterError,
-    dispatch_read_only_mcp_tool,
-    read_only_mcp_governance_policy,
-    register_read_only_mcp_tools,
-)
+
+ALLOWED_OPERATIONS = frozenset({"status", "list_files", "read_file"})
 
 
 def build_server() -> MCPServer:
     configured_root = Path(os.environ.get("AUTHORITYLAB_ROOT", os.getcwd())).expanduser()
     workspace = BoundedWorkspace(configured_root)
     root = workspace.root
-    registry = ToolRegistry()
 
-    register_read_only_mcp_tools(
-        registry,
-        status=lambda: {
-            "status": "ready" if workspace.status().get("ready") is True else "not_ready",
-            "directory_exists": root.is_dir(),
-            "directory": str(root),
-            "max_file_bytes": workspace.status().get("max_file_bytes"),
-        },
-        list_files=lambda: [
-            name
-            for name in workspace.list_files(".")
-            if not name.endswith("/")
-        ][:100],
-        read_file=lambda path: workspace.read_file(path),
-    )
-    # This bridge applies its own operation allow-list and validates every payload
-    # before invoking these three read-only handlers. It is a deliberate legacy
-    # adapter boundary, not a general WorkflowCore authorization example.
-    core = WorkflowCore(
-        registry, policy=read_only_mcp_governance_policy(), legacy_mode=True
-    )
     server = MCPServer(
         name="authoritylab-termux",
-        version="0.2.5",
+        version="0.2.6",
         instructions="Read-only workspace bridge. Only status, list_files, and read_file are exposed.",
     )
 
     def audit_report(event: Mapping[str, Any]) -> None:
-        """Write metadata-only workflow records to stderr, never file contents."""
+        """Write metadata-only records to stderr; never include file contents or paths."""
         print(json.dumps(dict(event), sort_keys=True), file=sys.stderr, flush=True)
 
-    def dispatch(kind: str, payload: dict[str, Any]) -> Any:
+    def dispatch(kind: str, payload: Mapping[str, Any] | None = None) -> Any:
+        # Keep this server's operation allowlist explicit. Avoid routing ordinary
+        # workspace reads through WorkflowCore/ToolRegistry: their governance
+        # path can reject a valid bounded filesystem operation before it runs.
+        if not isinstance(kind, str) or kind not in ALLOWED_OPERATIONS:
+            raise ToolError("MCP operation is not allowlisted")
+        if payload is None:
+            safe_payload: dict[str, Any] = {}
+        elif isinstance(payload, Mapping):
+            safe_payload = dict(payload)
+        else:
+            raise ToolError("MCP payload must be a mapping")
+
+        if kind in {"status", "list_files"} and safe_payload:
+            raise ToolError(f"{kind} does not accept arguments")
+        if kind == "read_file":
+            path = safe_payload.get("path")
+            if set(safe_payload) != {"path"} or not isinstance(path, str) or not path:
+                raise ToolError("read_file requires exactly one non-empty path argument")
+            if "\\x00" in path or "\\\\" in path:
+                raise ToolError("path contains a forbidden character")
+
         try:
-            return dispatch_read_only_mcp_tool(
-                core,
-                kind=kind,
-                payload=payload,
-                audit_sink=audit_report,
-            )
-        except MCPAdapterError as exc:
-            raise ToolError(str(exc)) from None
+            if kind == "status":
+                result = {
+                    "status": "ready" if workspace.status().get("ready") is True else "not_ready",
+                    "directory_exists": root.is_dir(),
+                    "directory": str(root),
+                    "max_file_bytes": workspace.status().get("max_file_bytes"),
+                }
+            elif kind == "list_files":
+                result = [
+                    name for name in workspace.list_files(".")
+                    if not name.endswith("/")
+                ][:100]
+            else:
+                result = workspace.read_file(path)
+
+            audit_report({"operation": kind, "status": "PASS"})
+            return result
+        except Exception as exc:
+            try:
+                audit_report({
+                    "operation": kind,
+                    "status": "FAIL",
+                    "error_type": type(exc).__name__,
+                })
+            except Exception:
+                pass
+            # Do not expose raw exception text, which may contain local paths.
+            raise ToolError(f"{kind} failed: {type(exc).__name__}") from None
 
     @server.tool()
     def status() -> dict[str, Any]:
