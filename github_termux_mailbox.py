@@ -288,7 +288,7 @@ def run_once(
                     value = execute_task(workspace, task)
                     outcome = result_body(task_id, comment_id, result=value)
                 except Exception as exc:
-                    safe_error = exc.args[0] if isinstance(exc, MailboxError) and exc.args else type(exc).__name__
+                    safe_error = str(exc) if isinstance(exc, MailboxError) else type(exc).__name__
                     outcome = result_body(task_id, comment_id, error=str(safe_error)[:120])
         except MailboxError as exc:
             outcome = result_body(task_id, comment_id, error=str(exc)[:120])
