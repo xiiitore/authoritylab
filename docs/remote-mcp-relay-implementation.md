@@ -59,12 +59,20 @@ Python environment can import `termux_workspace_tools` before starting the agent
 
 ## Termux agent (only after a reviewed HTTPS gateway exists)
 
+From the AuthorityLab checkout, install the project into the same Python environment used to run the agent. This installs the package; it does not start the relay or expose a network listener:
+
+```sh
+python -m pip install -e .
+```
+
+Then start the agent as a package module (not as a standalone script):
+
 ```sh
 export AUTHORITYLAB_RELAY_URL='https://<reviewed-gateway-host>'
 read -rsp "Agent token: " AUTHORITYLAB_AGENT_TOKEN; echo
 export AUTHORITYLAB_AGENT_TOKEN
 export AUTHORITYLAB_ROOT="$HOME/mcp-share"
-python termux_relay_agent.py
+python -m authoritylab.termux_relay_agent
 ```
 
 Keep the agent token in a private configuration file or secret store with
