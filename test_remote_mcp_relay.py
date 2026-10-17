@@ -22,8 +22,10 @@ class BrokerTests(unittest.TestCase):
         broker = RequestBroker()
         with self.assertRaisesRegex(RelayError, "tool_not_allowed"):
             broker.submit("shell", {"command": "id"}, timeout=0.1)
-        with self.assertRaisesRegex(RelayError, "invalid_arguments"):
-            broker.submit("read_file", {"path": "../secret"}, timeout=0.1)
+        for path in ("../secret", "/etc/passwd", ".." + chr(92) + "secret", "bad" + chr(0) + "path"):
+            with self.subTest(path=repr(path)):
+                with self.assertRaisesRegex(RelayError, "invalid_arguments"):
+                    broker.submit("read_file", {"path": path}, timeout=0.1)
 
     def test_expired_request_cannot_be_completed(self):
         broker = RequestBroker()
