@@ -15,10 +15,17 @@ continue working between turns.
 - `status`: reports readiness and the file-size limit.
 - `list_files`: lists a bounded set of names in the configured workspace.
 - `read_file`: reads one allowed relative path, with a 20,000-character result cap.
+- `git_status`: returns bounded repository status through Dulwich.
+- `git_diff`: returns a bounded working-tree diff.
+- `run_tests`: runs only `python -m unittest discover -v`; the repository's
+  test code is executed, so use a trusted checkout.
+- `write_file`: atomically writes UTF-8 text to one confined relative path,
+  capped at 30,000 bytes per task. The underlying workspace layer rejects
+  traversal, symlinks, hard-linked targets, and writes to `.git`.
 
-No shell, arbitrary Python, write, Git mutation, test execution, or filesystem
-path outside the preconfigured `AUTHORITYLAB_ROOT` is exposed by this mailbox.
-Free-form prose is never interpreted as executable instructions.
+No arbitrary shell command, arbitrary Python expression, Git commit, push, or
+filesystem path outside the preconfigured `AUTHORITYLAB_ROOT` is exposed by
+this mailbox. Free-form prose is never interpreted as executable instructions.
 
 ## Task envelope
 
@@ -36,6 +43,10 @@ Supported actions and arguments:
 ```json
 {"version":1,"task_id":"probe-002","action":"list_files","arguments":{}}
 {"version":1,"task_id":"probe-003","action":"read_file","arguments":{"path":"README.md"}}
+{"version":1,"task_id":"probe-004","action":"git_status","arguments":{}}
+{"version":1,"task_id":"probe-005","action":"git_diff","arguments":{}}
+{"version":1,"task_id":"probe-006","action":"run_tests","arguments":{}}
+{"version":1,"task_id":"probe-007","action":"write_file","arguments":{"path":"notes.txt","content":"text to write"}}
 ```
 
 Task IDs must be unique. Results use the `<!-- authoritylab-result:v1 -->`
@@ -85,6 +96,8 @@ Before relying on this:
    traversal, oversized file results, API rate limits, and lost network.
 4. Test in Termux using a dedicated repository containing no secrets.
 5. Verify a task can be posted and a result read back without exposing the token.
-6. Keep the worker read-only. Write/execute operations require a separate design.
+6. Review each write task before sending it; writes are real workspace mutations.
+7. Run the test action only in a trusted checkout, inspect the result, and verify
+   the diff before accepting a change. No automatic commit or push is performed.
 
 This is an initial transport milestone, not a production-certified agent.
