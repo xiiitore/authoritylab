@@ -285,6 +285,41 @@ def make_handler(broker: RequestBroker, client_token: str, agent_token: str):
     return Handler
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Threaded HTTP server with a hard cap on active request threads."""
+
+    max_concurrent_connections = 16
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._connection_slots = threading.BoundedSemaphore(self.max_concurrent_connections)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self._connection_slots.acquire(blocking=False):
+            try:
+                request.sendall(
+                    b"HTTP/1.1 503 Service Unavailable\\r\\n"
+                    b"Connection: close\\r\\n"
+                    b"Content-Length: 0\\r\\n\\r\\n"
+                )
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._connection_slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._connection_slots.release()
+
+
 def main() -> None:
     client_token = os.environ.get("AUTHORITYLAB_CLIENT_TOKEN")
     agent_token = os.environ.get("AUTHORITYLAB_AGENT_TOKEN")
@@ -295,7 +330,7 @@ def main() -> None:
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise SystemExit("Gateway must bind to loopback; put an authenticated TLS reverse proxy in front.")
     port = int(os.environ.get("AUTHORITYLAB_RELAY_PORT", "8765"))
-    server = ThreadingHTTPServer((host, port), make_handler(RequestBroker(), client_token, agent_token))
+    server = BoundedThreadingHTTPServer((host, port), make_handler(RequestBroker(), client_token, agent_token))
     print(f"AuthorityLab relay listening on {host}:{port}; loopback only. Ctrl-C to stop.")
     try:
         server.serve_forever(poll_interval=0.25)
