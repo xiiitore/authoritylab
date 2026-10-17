@@ -10,6 +10,19 @@ worker must be running, online, and configured with a GitHub token. A GitHub
 issue comment is a transport, not a guarantee that ChatGPT can autonomously
 continue working between turns.
 
+## Deployment and installation boundary
+
+The action list below describes this experimental branch, not proof of what is
+installed on a user's device. The currently observed local worker has only
+`status`, `list_files`, and `read_file` enabled. Do not assume that updating a
+GitHub branch updates the Termux checkout or the running process; verify the
+local source and restart deliberately after a controlled sync.
+
+There is no package-installation action in this mailbox. It does not expose
+`pkg`, `apt`, `pip install`, or arbitrary shell execution. Installing software
+must remain a separate, explicit local operation with reviewed package names,
+trusted sources, and user authorization.
+
 ## Current allowed actions
 
 - `status`: reports readiness and the file-size limit.
@@ -26,6 +39,21 @@ continue working between turns.
 No arbitrary shell command, arbitrary Python expression, Git commit, push, or
 filesystem path outside the preconfigured `AUTHORITYLAB_ROOT` is exposed by
 this mailbox. Free-form prose is never interpreted as executable instructions.
+
+## Sensitive paths and public issue visibility
+
+The mailbox rejects common credential-bearing path names for both `read_file`
+and `write_file`, including `.env*`, credential/token/password/private-key
+names, and common key/certificate file extensions. This is a conservative
+denylist, not a complete secret detector: it cannot prove that an allowed file
+contains no secret.
+
+**Do not point the mailbox at a workspace containing secrets or private user
+data.** GitHub issue comments and task results are visible to everyone with
+access to that issue; in a public repository they may be public. Use a private,
+disposable, secret-free checkout for write/test experiments. Treat `git_diff`
+and `run_tests` output as potentially sensitive and review the mailbox issue's
+visibility before enabling those actions.
 
 ## Task envelope
 
