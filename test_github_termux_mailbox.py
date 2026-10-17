@@ -50,6 +50,14 @@ class TaskValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(mailbox.MailboxError, "action_not_allowed"):
             mailbox.parse_task(task_body(self.valid_task(action="shell")))
 
+    def test_unhashable_action_rejected_cleanly(self):
+        with self.assertRaisesRegex(mailbox.MailboxError, "action_not_allowed"):
+            mailbox.parse_task(task_body(self.valid_task(action=["shell"])))
+
+    def test_boolean_version_is_not_integer_version_one(self):
+        with self.assertRaisesRegex(mailbox.MailboxError, "task_version_unsupported"):
+            mailbox.parse_task(task_body(self.valid_task(version=True)))
+
     def test_path_traversal_rejected(self):
         with self.assertRaisesRegex(mailbox.MailboxError, "read_file_path_invalid"):
             mailbox.parse_task(task_body(self.valid_task(
