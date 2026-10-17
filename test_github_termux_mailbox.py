@@ -63,6 +63,42 @@ class TaskValidationTests(unittest.TestCase):
             mailbox.parse_task(task_body(self.valid_task(
                 action="read_file", arguments={"path": "../secret"})))
 
+    def test_write_file_requires_exact_arguments_and_confined_path(self):
+        valid = self.valid_task(action="write_file", arguments={"path": "README.md", "content": "safe"})
+        self.assertEqual(mailbox.parse_task(task_body(valid))["action"], "write_file")
+        for path in ("../secret", "/tmp/secret", "dir/../../secret"):
+            invalid = self.valid_task(action="write_file", arguments={"path": path, "content": "x"})
+            with self.assertRaisesRegex(mailbox.MailboxError, "write_file_path_invalid"):
+                mailbox.parse_task(task_body(invalid))
+
+    def test_write_file_content_is_bounded(self):
+        invalid = self.valid_task(action="write_file", arguments={
+            "path": "README.md", "content": "x" * (mailbox.MAX_WRITE_BYTES + 1)})
+        with self.assertRaisesRegex(mailbox.MailboxError, "write_file_content_too_large"):
+            mailbox.parse_task(task_body(invalid))
+
+    def test_git_status_diff_tests_and_write_file_actions(self):
+        class GitWorkspace(FakeWorkspace):
+            def git_status(self):
+                return "## main\\n M README.md\\n"
+            def git_diff(self):
+                return "diff --git a/README.md b/README.md"
+            def run_tests(self):
+                return {"command": "ignored", "output": "Ran 1 test"}
+            def write_file(self, path, content):
+                return {"path": path, "bytes_written": len(content.encode("utf-8"))}
+
+        workspace = GitWorkspace()
+        self.assertEqual(mailbox.execute_task(workspace, self.valid_task(
+            action="git_status"))["status"], "## main\\n M README.md\\n")
+        self.assertEqual(mailbox.execute_task(workspace, self.valid_task(
+            action="git_diff"))["diff"], "diff --git a/README.md b/README.md")
+        self.assertEqual(mailbox.execute_task(workspace, self.valid_task(
+            action="run_tests"))["output"], "Ran 1 test")
+        self.assertEqual(mailbox.execute_task(workspace, self.valid_task(
+            action="write_file", arguments={"path": "README.md", "content": "safe"})),
+            {"path": "README.md", "bytes_written": 4})
+
     def test_status_does_not_expose_root_or_capabilities(self):
         result = mailbox.execute_task(FakeWorkspace(), self.valid_task())
         self.assertEqual(result, {"ready": True, "max_file_bytes": 200000})
