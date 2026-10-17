@@ -50,7 +50,7 @@ def build_server() -> MCPServer:
             path = safe_payload.get("path")
             if set(safe_payload) != {"path"} or not isinstance(path, str) or not path:
                 raise ToolError("read_file requires exactly one non-empty path argument")
-            if "\\x00" in path or "\\\\" in path:
+            if "\x00" in path or "\\" in path:
                 raise ToolError("path contains a forbidden character")
 
         try:
