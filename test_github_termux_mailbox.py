@@ -155,6 +155,32 @@ class MailboxStateTests(unittest.TestCase):
                 self.assertEqual(count, 0)
                 post.assert_not_called()
 
+    def test_unexpected_workspace_error_does_not_leak_exception_text(self):
+        class LeakyWorkspace(FakeWorkspace):
+            def status(self):
+                raise RuntimeError("SECRET_LOCAL_OUTPUT /private/path/token-value")
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            comment = {
+                "id": 125,
+                "user": {"login": "xiiitore"},
+                "body": task_body({"version": 1, "task_id": "probe-error-001",
+                                   "action": "status", "arguments": {}}),
+            }
+            with patch.object(mailbox, "fetch_comments", return_value=[comment]), \
+                 patch.object(mailbox, "post_comment") as post:
+                count = mailbox.run_once(
+                    token="not-a-real-token", repo="owner/repo", issue_number=7,
+                    allowed_authors={"xiiitore"}, state_path=path,
+                    workspace=LeakyWorkspace(),
+                )
+            self.assertEqual(count, 1)
+            body = post.call_args.args[3]
+            self.assertIn('"error":"RuntimeError"', body)
+            self.assertNotIn("SECRET_LOCAL_OUTPUT", body)
+            self.assertNotIn("/private/path", body)
+            self.assertNotIn("token-value", body)
     def test_non_allowlisted_author_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.json"
