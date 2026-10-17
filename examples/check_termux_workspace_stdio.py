@@ -14,7 +14,7 @@ from pathlib import Path
 
 from mcp import Client, StdioServerParameters
 
-EXPECTED_TOOLS = {"status", "list_files", "read_file"}
+EXPECTED_TOOLS = {"status", "list_files", "read_file", "diagnostics"}
 
 
 def _extract_string_list(result: object) -> list[str]:
@@ -97,12 +97,22 @@ async def main() -> None:
             names = {tool.name for tool in listed.tools}
             if names != EXPECTED_TOOLS or len(listed.tools) != len(EXPECTED_TOOLS):
                 raise AssertionError(f"Unexpected MCP tools: {sorted(names)!r}")
-            print("PASS: server exposes exactly status, list_files, read_file")
+            print("PASS: server exposes exactly status, list_files, read_file, diagnostics")
 
             status = await client.call_tool("status", {})
             if status.is_error or _status_data(status).get("status") != "ready":
                 raise AssertionError("status did not report a ready workspace")
             print("PASS: status")
+
+            diagnostics = await client.call_tool("diagnostics", {})
+            if diagnostics.is_error:
+                raise AssertionError("diagnostics failed")
+            diagnostic_data = _status_data(diagnostics)
+            if not isinstance(diagnostic_data.get("python_version"), str):
+                raise AssertionError("diagnostics did not return bounded Python metadata")
+            if "paths" not in diagnostic_data or "selinux_context" not in diagnostic_data:
+                raise AssertionError("diagnostics omitted expected runtime metadata")
+            print("PASS: diagnostics returns bounded runtime metadata")
 
             files = await client.call_tool("list_files", {})
             if files.is_error:
