@@ -13,7 +13,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from authoritylab.termux_workspace_tools import BoundedWorkspace
 
-ALLOWED_OPERATIONS = frozenset({"status", "list_files", "read_file"})
+ALLOWED_OPERATIONS = frozenset({"status", "list_files", "read_file", "diagnostics"})
 
 
 def build_server() -> MCPServer:
@@ -44,7 +44,7 @@ def build_server() -> MCPServer:
         else:
             raise ToolError("MCP payload must be a mapping")
 
-        if kind in {"status", "list_files"} and safe_payload:
+        if kind in {"status", "list_files", "diagnostics"} and safe_payload:
             raise ToolError(f"{kind} does not accept arguments")
         if kind == "read_file":
             path = safe_payload.get("path")
@@ -66,6 +66,9 @@ def build_server() -> MCPServer:
                     name for name in workspace.list_files(".")
                     if not name.endswith("/")
                 ][:100]
+            elif kind == "diagnostics":
+                # Metadata-only diagnostics: no file contents or full paths.
+                result = workspace.diagnostics()
             else:
                 result = workspace.read_file(path)
 
@@ -92,6 +95,11 @@ def build_server() -> MCPServer:
     def list_files() -> list[str]:
         """List direct file names in the workspace root."""
         return dispatch("list_files", {})
+
+    @server.tool()
+    def diagnostics() -> dict[str, Any]:
+        """Return bounded, read-only process and filesystem-access diagnostics."""
+        return dispatch("diagnostics", {})
 
     @server.tool()
     def read_file(path: str) -> str:
