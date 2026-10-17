@@ -6,10 +6,10 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from authoritylab.remote_mcp_relay import (
-    RequestBroker, RelayError, make_handler, _json_bytes, _valid_token,
+    BoundedThreadingHTTPServer, RequestBroker, RelayError, make_handler, _json_bytes, _valid_token,
 )
 
 
@@ -163,6 +163,60 @@ class HttpIntegrationTests(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertEqual(body["error"]["code"], -32601)
+
+
+
+class BoundedServerTests(unittest.TestCase):
+    def test_excess_connection_gets_503(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        class SingleSlotServer(BoundedThreadingHTTPServer):
+            max_concurrent_connections = 1
+
+        class BlockingHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                entered.set()
+                release.wait(2.0)
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+                except OSError:
+                    pass
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = SingleSlotServer(("127.0.0.1", 0), BlockingHandler)
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        base = "http://127.0.0.1:%d/" % server.server_address[1]
+        first_result = {}
+
+        def first_request():
+            try:
+                with urllib.request.urlopen(base, timeout=3.0) as response:
+                    first_result["status"] = response.status
+            except Exception as exc:
+                first_result["error"] = exc
+
+        first_thread = threading.Thread(target=first_request)
+        first_thread.start()
+        try:
+            self.assertTrue(entered.wait(1.0), "first connection did not enter handler")
+            second = urllib.request.Request(base)
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(second, timeout=2.0)
+            self.assertEqual(ctx.exception.code, 503)
+        finally:
+            release.set()
+            first_thread.join(3.0)
+            server.shutdown()
+            server.server_close()
+            server_thread.join(2.0)
+        self.assertEqual(first_result.get("status"), 200)
 
 
 if __name__ == "__main__":
