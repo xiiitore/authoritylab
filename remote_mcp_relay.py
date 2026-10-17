@@ -281,8 +281,9 @@ def make_handler(broker: RequestBroker, client_token: str, agent_token: str):
 def main() -> None:
     client_token = os.environ.get("AUTHORITYLAB_CLIENT_TOKEN")
     agent_token = os.environ.get("AUTHORITYLAB_AGENT_TOKEN")
-    if not _valid_token(client_token) or not _valid_token(agent_token):
-        raise SystemExit("Set separate 32+ character AUTHORITYLAB_CLIENT_TOKEN and AUTHORITYLAB_AGENT_TOKEN secrets.")
+    if (not _valid_token(client_token) or not _valid_token(agent_token)
+            or hmac.compare_digest(client_token or "", agent_token or "")):
+        raise SystemExit("Set two distinct 32+ character AUTHORITYLAB_CLIENT_TOKEN and AUTHORITYLAB_AGENT_TOKEN secrets.")
     host = os.environ.get("AUTHORITYLAB_RELAY_HOST", "127.0.0.1")
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise SystemExit("Gateway must bind to loopback; put an authenticated TLS reverse proxy in front.")
