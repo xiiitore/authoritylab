@@ -248,13 +248,14 @@ def make_handler(broker: RequestBroker, client_token: str, agent_token: str):
                     name = params["name"]
                     arguments = params.get("arguments", {})
                     if name not in ALLOWED_TOOLS or not isinstance(arguments, dict):
-                        raise RelayError("tool_not_allowed")
-                    try:
-                        output = broker.submit(name, arguments)
-                        result = {"content": [{"type": "text", "text": json.dumps(output, ensure_ascii=False)}],
-                                  "isError": False}
-                    except RelayError as exc:
-                        result = {"content": [{"type": "text", "text": str(exc)}], "isError": True}
+                        result = {"content": [{"type": "text", "text": "tool_not_allowed"}], "isError": True}
+                    else:
+                        try:
+                            output = broker.submit(name, arguments)
+                            result = {"content": [{"type": "text", "text": json.dumps(output, ensure_ascii=False)}],
+                                      "isError": False}
+                        except RelayError as exc:
+                            result = {"content": [{"type": "text", "text": str(exc)}], "isError": True}
                 else:
                     if "id" not in message:
                         self._reply(202)
