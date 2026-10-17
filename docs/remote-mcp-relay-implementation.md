@@ -6,7 +6,7 @@ connector. Do not merge or expose it publicly before the gates below pass.
 
 ## Components
 
-- `remote_mcp_relay.py`: stateless HTTP/JSON-RPC MCP gateway with an in-memory,
+- `remote_mcp_relay.py`: HTTP/JSON-RPC MCP gateway with an in-memory,
   bounded request broker. It exposes only `status`, `list_files`, and
   `read_file`. The listener refuses non-loopback bind addresses.
 - `termux_relay_agent.py`: outbound polling worker for Termux. It uses the
@@ -40,7 +40,24 @@ from another device. For a real remote connection, the gateway must remain
 loopback-bound behind an authenticated TLS reverse proxy or an equivalent
 reviewed ingress. Never bind the Python server directly to a public interface.
 
-Termux agent (only after a reviewed HTTPS gateway exists):
+## Termux workspace preflight
+
+`BoundedWorkspace` requires `AUTHORITYLAB_ROOT` to be an existing Git repository
+directory. An ordinary empty directory such as `~/mcp-share` will fail startup
+until initialized. Create a dedicated, narrowly scoped workspace rather than
+pointing the relay at the full home directory or shared storage:
+
+```sh
+mkdir -p "$HOME/mcp-share"
+git -C "$HOME/mcp-share" init
+```
+
+Put only files you intentionally permit this relay to read in that directory.
+The relay excludes `.git` from listing and path reads, but this is not an OS
+sandbox; the directory itself must remain narrowly scoped. Verify the active
+Python environment can import `termux_workspace_tools` before starting the agent.
+
+## Termux agent (only after a reviewed HTTPS gateway exists)
 
 ```sh
 export AUTHORITYLAB_RELAY_URL='https://<reviewed-gateway-host>'
@@ -50,10 +67,10 @@ export AUTHORITYLAB_ROOT="$HOME/mcp-share"
 python termux_relay_agent.py
 ```
 
-Use an existing, narrowly scoped directory for `AUTHORITYLAB_ROOT`; do not
-point it at the whole home directory or shared storage. Keep the agent token in
-a private configuration file or secret store with restrictive permissions.
-The client token is separate and must never be installed on the phone.
+Keep the agent token in a private configuration file or secret store with
+restrictive permissions. The client token is separate and must never be
+installed on the phone. Do not run the agent until the remote gateway's TLS,
+authentication, access controls, and MCP compatibility have been reviewed.
 
 ## Test
 
@@ -69,7 +86,7 @@ or production readiness. CI is not a substitute for the actual device smoke test
 
 1. Run this branch's tests and the full repository suite; inspect all failures.
 2. Independently review HTTP/JSON-RPC handling, authentication, queue races,
-   path confinement, body limits, logs, and timeout/disconnect behavior.
+   path confinement, body limits, concurrency, logs, and timeout/disconnect behavior.
 3. Verify the exact MCP protocol version and authentication method supported by
    the intended ChatGPT remote connector. Do not assume the mobile app can add
    an arbitrary custom MCP server.
