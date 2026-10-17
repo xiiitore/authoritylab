@@ -59,7 +59,10 @@ class RequestBroker:
         if tool == "read_file":
             if set(arguments) != {"path"} or not isinstance(arguments.get("path"), str):
                 raise RelayError("invalid_arguments")
-            if not arguments["path"] or len(arguments["path"]) > 1024:
+            path = arguments["path"]
+            normalized = path.replace("\\\\", "/")
+            if (not path or len(path) > 1024 or "\\x00" in path
+                    or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
                 raise RelayError("invalid_arguments")
         request_id = secrets.token_urlsafe(24)
         deadline = time.monotonic() + min(max(timeout, 0.1), REQUEST_TIMEOUT)
