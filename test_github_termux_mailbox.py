@@ -63,6 +63,31 @@ class TaskValidationTests(unittest.TestCase):
             mailbox.parse_task(task_body(self.valid_task(
                 action="read_file", arguments={"path": "../secret"})))
 
+    def test_sensitive_paths_are_rejected_for_read_and_write(self):
+        read_paths = (
+            ".env", ".env.production", ".netrc", ".npmrc",
+            "config/github_token.json", "certs/client.pem",
+            "keys/private_key.txt", "credentials.json", "secrets.json",
+        )
+        for path in read_paths:
+            with self.subTest(action="read_file", path=path):
+                task = self.valid_task(action="read_file", arguments={"path": path})
+                with self.assertRaisesRegex(mailbox.MailboxError, "read_file_sensitive_path_denied"):
+                    mailbox.parse_task(task_body(task))
+
+        write_paths = (
+            ".env", ".env.local", ".git-credentials",
+            "config/passwords.txt", "keys/id_rsa", "certs/client.p12",
+        )
+        for path in write_paths:
+            with self.subTest(action="write_file", path=path):
+                task = self.valid_task(
+                    action="write_file",
+                    arguments={"path": path, "content": "do not write"},
+                )
+                with self.assertRaisesRegex(mailbox.MailboxError, "write_file_sensitive_path_denied"):
+                    mailbox.parse_task(task_body(task))
+
     def test_write_file_requires_exact_arguments_and_confined_path(self):
         valid = self.valid_task(action="write_file", arguments={"path": "README.md", "content": "safe"})
         self.assertEqual(mailbox.parse_task(task_body(valid))["action"], "write_file")
