@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-from remote_mcp_relay import (
+from authoritylab.remote_mcp_relay import (
     RequestBroker, RelayError, make_handler, _json_bytes, _valid_token,
 )
 
