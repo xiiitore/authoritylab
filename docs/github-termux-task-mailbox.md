@@ -10,6 +10,19 @@ worker must be running, online, and configured with a GitHub token. A GitHub
 issue comment is a transport, not a guarantee that ChatGPT can autonomously
 continue working between turns.
 
+## Deployment and installation boundary
+
+The action list below describes this experimental branch, not proof of what is
+installed on a user's device. The currently observed local worker has only
+`status`, `list_files`, and `read_file` enabled. Do not assume that updating a
+GitHub branch updates the Termux checkout or the running process; verify the
+local source and restart deliberately after a controlled sync.
+
+There is no package-installation action in this mailbox. It does not expose
+`pkg`, `apt`, `pip install`, or arbitrary shell execution. Installing software
+must remain a separate, explicit local operation with reviewed package names,
+trusted sources, and user authorization.
+
 ## Current allowed actions
 
 - `status`: reports readiness and the file-size limit.
