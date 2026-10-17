@@ -266,7 +266,13 @@ def make_handler(broker: RequestBroker, client_token: str, agent_token: str):
                 if "id" not in message:
                     self._reply(202)
                 else:
-                    self._reply(200, {"jsonrpc": "2.0", "id": request_id, "result": result})
+                    response = {"jsonrpc": "2.0", "id": request_id, "result": result}
+                    try:
+                        _json_bytes(response)
+                    except RelayError:
+                        response = {"jsonrpc": "2.0", "id": request_id, "result": {
+                            "content": [{"type": "text", "text": "response_too_large"}], "isError": True}}
+                    self._reply(200, response)
             except RelayError as exc:
                 self._reply(400, {"error": str(exc)})
 
