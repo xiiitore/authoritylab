@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open the configured root without following any symlink component."""
+    """Open root by descriptor traversal without following symlink components."""
     directory = getattr(os, "O_DIRECTORY", None)
     nofollow = getattr(os, "O_NOFOLLOW", None)
     if directory is None or nofollow is None:
@@ -16,23 +16,42 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
     if os.open not in os.supports_dir_fd:
         raise OSError("Platform lacks required safe relative-open features")
 
+    flags = os.O_RDONLY | directory | nofollow
     root_path = Path(os.path.abspath(os.fspath(root)))
-    descriptor = os.open(os.sep, os.O_RDONLY | directory)
+    cwd_path = Path(os.path.realpath(os.getcwd()))
+
     try:
-        for component in root_path.parts[1:]:
-            child = os.open(
-                component,
-                os.O_RDONLY | directory | nofollow,
-                dir_fd=descriptor,
-            )
-            os.close(descriptor)
+        common = Path(os.path.commonpath((str(root_path), str(cwd_path))))
+    except ValueError as exc:
+        raise OSError("Cannot establish a safe common path ancestor") from exc
+
+    descriptor = os.open(".", os.O_RDONLY | directory)
+    try:
+        current = cwd_path
+
+        # Walk upward from the already-open current directory. Do not open "/"
+        # by name; some Android/Termux environments deny that operation.
+        while current != common:
+            parent = os.open("..", flags, dir_fd=descriptor)
+            previous = descriptor
+            descriptor = parent
+            current = current.parent
+            os.close(previous)
+
+        # Walk downward from the common ancestor, refusing symlink components.
+        for component in root_path.relative_to(common).parts:
+            child = os.open(component, flags, dir_fd=descriptor)
+            previous = descriptor
             descriptor = child
+            os.close(previous)
+
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
             raise ValueError("Permitted root must be a directory")
         return descriptor
     except BaseException:
         os.close(descriptor)
         raise
+
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
     """Return whether root can be opened as a real directory, not a symlink."""
