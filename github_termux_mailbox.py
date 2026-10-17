@@ -25,8 +25,9 @@ RESULT_MARKER = "<!-- authoritylab-result:v1 -->"
 MAX_HTTP_BYTES = 1_000_000
 MAX_RESULT_CHARS = 20_000
 MAX_LIST_ITEMS = 100
+MAX_WRITE_BYTES = 30_000
 MAX_COMMENT_PAGES = 20
-ALLOWED_ACTIONS = frozenset({"status", "list_files", "read_file"})
+ALLOWED_ACTIONS = frozenset({"status", "list_files", "read_file", "git_status", "git_diff", "run_tests", "write_file"})
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$")
 
 
@@ -53,7 +54,7 @@ def parse_task(body: str) -> dict[str, Any]:
         raise MailboxError("action_not_allowed")
     if not isinstance(task["arguments"], dict):
         raise MailboxError("arguments_invalid")
-    if task["action"] in {"status", "list_files"} and task["arguments"]:
+    if task["action"] in {"status", "list_files", "git_status", "git_diff", "run_tests"} and task["arguments"]:
         raise MailboxError("unexpected_arguments")
     if task["action"] == "read_file":
         if set(task["arguments"]) != {"path"} or not isinstance(task["arguments"]["path"], str):
@@ -63,6 +64,23 @@ def parse_task(body: str) -> dict[str, Any]:
         if (not path or len(path) > 1024 or "\x00" in path
                 or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
             raise MailboxError("read_file_path_invalid")
+    if task["action"] == "write_file":
+        if set(task["arguments"]) != {"path", "content"}:
+            raise MailboxError("write_file_arguments_invalid")
+        path = task["arguments"]["path"]
+        content = task["arguments"]["content"]
+        if not isinstance(path, str) or not isinstance(content, str):
+            raise MailboxError("write_file_arguments_invalid")
+        normalized = path.replace("\\", "/")
+        if (not path or len(path) > 1024 or "\x00" in path
+                or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
+            raise MailboxError("write_file_path_invalid")
+        try:
+            content_bytes = content.encode("utf-8")
+        except UnicodeEncodeError:
+            raise MailboxError("write_file_content_invalid") from None
+        if len(content_bytes) > MAX_WRITE_BYTES:
+            raise MailboxError("write_file_content_too_large")
     return task
 
 
@@ -187,6 +205,29 @@ def execute_task(workspace: BoundedWorkspace, task: dict[str, Any]) -> dict[str,
         if len(value) > MAX_RESULT_CHARS:
             raise MailboxError("file_result_too_large")
         return {"path": args["path"], "content": value}
+    if action == "git_status":
+        value = workspace.git_status()
+        if not isinstance(value, str):
+            raise MailboxError("git_status_result_invalid")
+        return {"status": value[-MAX_RESULT_CHARS:]}
+    if action == "git_diff":
+        value = workspace.git_diff()
+        if not isinstance(value, str):
+            raise MailboxError("git_diff_result_invalid")
+        return {"diff": value[-MAX_RESULT_CHARS:]}
+    if action == "run_tests":
+        value = workspace.run_tests()
+        if not isinstance(value, dict):
+            raise MailboxError("test_result_invalid")
+        output = value.get("output", "")
+        if not isinstance(output, str):
+            output = ""
+        return {"command": "python -m unittest discover -v", "output": output[-MAX_RESULT_CHARS:]}
+    if action == "write_file":
+        value = workspace.write_file(args["path"], args["content"])
+        if not isinstance(value, dict):
+            raise MailboxError("write_file_result_invalid")
+        return {"path": value.get("path"), "bytes_written": value.get("bytes_written")}
     raise MailboxError("action_not_allowed")
 
 
@@ -281,7 +322,7 @@ def main() -> None:
     issue_number = int(issue_raw)
     workspace = BoundedWorkspace(Path(root).expanduser())
     state_path = Path(state_raw).expanduser()
-    print("AuthorityLab GitHub mailbox started; read-only actions: status, list_files, read_file.")
+    print("AuthorityLab GitHub mailbox started; actions: status, list_files, read_file, git_status, git_diff, run_tests, write_file.")
     while True:
         try:
             processed = run_once(
