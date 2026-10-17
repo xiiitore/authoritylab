@@ -45,11 +45,11 @@ def parse_task(body: str) -> dict[str, Any]:
         raise MailboxError("task_json_invalid") from None
     if not isinstance(task, dict) or set(task) != {"version", "task_id", "action", "arguments"}:
         raise MailboxError("task_schema_invalid")
-    if task["version"] != 1:
+    if type(task["version"]) is not int or task["version"] != 1:
         raise MailboxError("task_version_unsupported")
     if not isinstance(task["task_id"], str) or not TASK_ID_RE.fullmatch(task["task_id"]):
         raise MailboxError("task_id_invalid")
-    if task["action"] not in ALLOWED_ACTIONS:
+    if not isinstance(task["action"], str) or task["action"] not in ALLOWED_ACTIONS:
         raise MailboxError("action_not_allowed")
     if not isinstance(task["arguments"], dict):
         raise MailboxError("arguments_invalid")
