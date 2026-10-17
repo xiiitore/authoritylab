@@ -28,9 +28,9 @@ them in shell command history. Both must be at least 32 characters.
 Gateway process (local test only):
 
 ```sh
-read -rsp "Client token: " AUTHORITYLAB_CLIENT_TOKEN; printf '\\n'
+read -rsp "Client token: " AUTHORITYLAB_CLIENT_TOKEN; echo
 export AUTHORITYLAB_CLIENT_TOKEN
-read -rsp "Agent token: " AUTHORITYLAB_AGENT_TOKEN; printf '\\n'
+read -rsp "Agent token: " AUTHORITYLAB_AGENT_TOKEN; echo
 export AUTHORITYLAB_AGENT_TOKEN
 python remote_mcp_relay.py
 ```
@@ -44,7 +44,7 @@ Termux agent (only after a reviewed HTTPS gateway exists):
 
 ```sh
 export AUTHORITYLAB_RELAY_URL='https://<reviewed-gateway-host>'
-read -rsp "Agent token: " AUTHORITYLAB_AGENT_TOKEN; printf '\\n'
+read -rsp "Agent token: " AUTHORITYLAB_AGENT_TOKEN; echo
 export AUTHORITYLAB_AGENT_TOKEN
 export AUTHORITYLAB_ROOT="$HOME/mcp-share"
 python termux_relay_agent.py
