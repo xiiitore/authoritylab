@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open root by descriptor traversal without following symlink components."""
+    """Open the configured root without following any symlink component."""
     directory = getattr(os, "O_DIRECTORY", None)
     nofollow = getattr(os, "O_NOFOLLOW", None)
     if directory is None or nofollow is None:
@@ -16,42 +16,50 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
     if os.open not in os.supports_dir_fd:
         raise OSError("Platform lacks required safe relative-open features")
 
-    flags = os.O_RDONLY | directory | nofollow
     root_path = Path(os.path.abspath(os.fspath(root)))
-    cwd_path = Path(os.path.realpath(os.getcwd()))
 
+    # Android/Termux may deny opening "/" even though paths inside the app
+    # sandbox are accessible. In that environment PREFIX normally ends in
+    # "<app-data>/files/usr"; use the app-data directory as the traversal
+    # anchor when root is lexically beneath it. The anchor is opened with
+    # O_NOFOLLOW, then every component below it is opened relative to a held
+    # descriptor with O_NOFOLLOW. This preserves checks for symlinked roots
+    # and ancestors inside the app sandbox without opening "/".
+    anchor = None
+    components = root_path.parts[1:]
+    prefix = os.environ.get("PREFIX")
+    if prefix:
+        prefix_path = Path(os.path.abspath(prefix))
+        candidate_anchor = prefix_path.parent.parent
+        try:
+            relative_root = root_path.relative_to(candidate_anchor)
+        except ValueError:
+            pass
+        else:
+            anchor = candidate_anchor
+            components = relative_root.parts
+
+    if anchor is None:
+        descriptor = os.open(os.sep, os.O_RDONLY | directory)
+    else:
+        descriptor = os.open(
+            str(anchor), os.O_RDONLY | directory | nofollow
+        )
     try:
-        common = Path(os.path.commonpath((str(root_path), str(cwd_path))))
-    except ValueError as exc:
-        raise OSError("Cannot establish a safe common path ancestor") from exc
-
-    descriptor = os.open(".", os.O_RDONLY | directory)
-    try:
-        current = cwd_path
-
-        # Walk upward from the already-open current directory. Do not open "/"
-        # by name; some Android/Termux environments deny that operation.
-        while current != common:
-            parent = os.open("..", flags, dir_fd=descriptor)
-            previous = descriptor
-            descriptor = parent
-            current = current.parent
-            os.close(previous)
-
-        # Walk downward from the common ancestor, refusing symlink components.
-        for component in root_path.relative_to(common).parts:
-            child = os.open(component, flags, dir_fd=descriptor)
-            previous = descriptor
+        for component in components:
+            child = os.open(
+                component,
+                os.O_RDONLY | directory | nofollow,
+                dir_fd=descriptor,
+            )
+            os.close(descriptor)
             descriptor = child
-            os.close(previous)
-
         if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
             raise ValueError("Permitted root must be a directory")
         return descriptor
     except BaseException:
         os.close(descriptor)
         raise
-
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
     """Return whether root can be opened as a real directory, not a symlink."""
