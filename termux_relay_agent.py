@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from termux_workspace_tools import BoundedWorkspace
+from authoritylab.termux_workspace_tools import BoundedWorkspace
 
 MAX_RESPONSE_BYTES = 256 * 1024
 ALLOWED_TOOLS = frozenset({"status", "list_files", "read_file"})
