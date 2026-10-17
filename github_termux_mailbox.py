@@ -31,7 +31,7 @@ ALLOWED_ACTIONS = frozenset({"status", "list_files", "read_file", "git_status", 
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$")
 SENSITIVE_PATH_COMPONENT_RE = re.compile(
     r"(?i)(?:^|[._-])(?:secret|secrets|credential|credentials|token|tokens|"
-    r"password|passwd|private[_-]?key|id_rsa|id_ed25519)(?:$|[._-])"
+    r"passwords?|passwds?|private[_-]?key|id_rsa|id_ed25519)(?:$|[._-])"
 )
 SENSITIVE_PATH_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"})
 SENSITIVE_PATH_NAMES = frozenset({
