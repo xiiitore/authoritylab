@@ -27,6 +27,21 @@ No arbitrary shell command, arbitrary Python expression, Git commit, push, or
 filesystem path outside the preconfigured `AUTHORITYLAB_ROOT` is exposed by
 this mailbox. Free-form prose is never interpreted as executable instructions.
 
+## Sensitive paths and public issue visibility
+
+The mailbox rejects common credential-bearing path names for both `read_file`
+and `write_file`, including `.env*`, credential/token/password/private-key
+names, and common key/certificate file extensions. This is a conservative
+denylist, not a complete secret detector: it cannot prove that an allowed file
+contains no secret.
+
+**Do not point the mailbox at a workspace containing secrets or private user
+data.** GitHub issue comments and task results are visible to everyone with
+access to that issue; in a public repository they may be public. Use a private,
+disposable, secret-free checkout for write/test experiments. Treat `git_diff`
+and `run_tests` output as potentially sensitive and review the mailbox issue's
+visibility before enabling those actions.
+
 ## Task envelope
 
 A task is a GitHub issue comment authored by a username explicitly listed in
