@@ -14,7 +14,7 @@ continue working between turns.
 
 - `status`: reports readiness and the file-size limit.
 - `list_files`: lists a bounded set of names in the configured workspace.
-- `read_file`: reads one allowed relative path, with a 20,000-character result cap.
+- `read_file`: reads one allowed relative path, with a 20,000-character result cap. For larger files, pass `start_line` and `end_line` together to retrieve a bounded line range (up to 500 lines).
 - `git_status`: returns bounded repository status through Dulwich.
 - `git_diff`: returns a bounded working-tree diff.
 - `run_tests`: runs only `python -m unittest discover -v`; the repository's
@@ -43,6 +43,7 @@ Supported actions and arguments:
 ```json
 {"version":1,"task_id":"probe-002","action":"list_files","arguments":{}}
 {"version":1,"task_id":"probe-003","action":"read_file","arguments":{"path":"README.md"}}
+{"version":1,"task_id":"probe-008","action":"read_file","arguments":{"path":"capability-registry.json","start_line":1,"end_line":80}}
 {"version":1,"task_id":"probe-004","action":"git_status","arguments":{}}
 {"version":1,"task_id":"probe-005","action":"git_diff","arguments":{}}
 {"version":1,"task_id":"probe-006","action":"run_tests","arguments":{}}
