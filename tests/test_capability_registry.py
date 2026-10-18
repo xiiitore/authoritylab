@@ -39,7 +39,7 @@ class CapabilityRegistryTests(unittest.TestCase):
     def test_registry_has_required_root_contract(self):
         required = {
             "registry_schema_version", "generated_on", "source", "status",
-            "tool_count", "provider_counts", "classification_policy", "tools",
+            "tool_count", "provider_counts", "classification_policy", "catalog_notes", "tools",
         }
         self.assertTrue(required.issubset(self.registry))
         self.assertEqual(self.registry["registry_schema_version"], "1.0.0")
@@ -67,7 +67,7 @@ class CapabilityRegistryTests(unittest.TestCase):
     def test_entry_fields_and_effect_classes_are_valid(self):
         required = {
             "tool_id", "provider", "description", "description_truncated",
-            "preliminary_effect_class", "execution_verified", "notes",
+            "preliminary_effect_class", "execution_verified",
         }
         allowed = {
             "POTENTIAL_SIDE_EFFECT",
@@ -78,6 +78,13 @@ class CapabilityRegistryTests(unittest.TestCase):
             self.assertTrue(required.issubset(item))
             self.assertIn(item["preliminary_effect_class"], allowed)
             self.assertIsInstance(item["description_truncated"], bool)
+
+    def test_shared_catalog_notes_preserve_repeated_note(self):
+        self.assertTrue(self.registry["catalog_notes"])
+        self.assertTrue(all(isinstance(note, str) and note for note in self.registry["catalog_notes"]))
+
+    def test_registry_is_below_workspace_read_limit(self):
+        self.assertLess(REGISTRY_PATH.stat().st_size, 200_000)
 
 
 if __name__ == "__main__":
