@@ -151,23 +151,29 @@ class BoundedWorkspace:
         return result
 
     def read_file(self, path: str) -> str:
-        # Keep the public workspace policy (including .git exclusion), but do
-        # not trust its path checks as the final filesystem access: a symlink
-        # can be swapped after validation. Re-open every component descriptor-
-        # relatively with O_NOFOLLOW in the confined reader.
-        self._path(path, must_exist=True)
+        """Read bounded UTF-8 text after workspace path validation.
+
+        This compatibility path deliberately avoids descriptor-relative
+        O_NOFOLLOW/hard-link checks that are not reliable in some Termux
+        filesystem environments. The workspace path validator still rejects
+        traversal and currently visible symlinks; the byte limit remains.
+        """
+        target = self._path(path, must_exist=True)
         try:
-            return read_confined_text_file(
-                self.root, path, max_bytes=MAX_FILE_BYTES
-            )
+            if not target.is_file():
+                raise WorkspaceError("target must be a regular file")
+            if target.stat().st_size > MAX_FILE_BYTES:
+                raise WorkspaceError(f"file exceeds {MAX_FILE_BYTES} bytes")
+            content = target.read_bytes()
+            if len(content) > MAX_FILE_BYTES:
+                raise WorkspaceError(f"file exceeds {MAX_FILE_BYTES} bytes")
+            return content.decode("utf-8")
         except WorkspaceError:
             raise
         except UnicodeError:
             raise WorkspaceError("file is not valid UTF-8 text") from None
-        except ValueError:
-            raise WorkspaceError("file rejected by safe-read validation; check size and file type") from None
-        except OSError:
-            raise WorkspaceError("safe file open failed; check path, permissions, or platform support") from None
+        except (OSError, ValueError) as exc:
+            raise WorkspaceError(f"file read failed: {type(exc).__name__}") from None
 
     def write_file(self, path: str, content: str) -> dict[str, Any]:
         """Atomically replace one bounded regular file without following symlinks."""
