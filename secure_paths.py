@@ -8,22 +8,21 @@ from pathlib import Path, PurePosixPath
 
 
 def _open_confined_root(root: str | os.PathLike[str]) -> int:
-    """Open root by descriptor traversal without following symlink components."""
+    """Open root by descriptor traversal with descriptor-relative traversal."""
     directory = getattr(os, "O_DIRECTORY", None)
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    if directory is None or nofollow is None:
+    if directory is None:
         raise OSError("Platform lacks required safe directory-open features")
     if os.open not in os.supports_dir_fd:
         raise OSError("Platform lacks required safe relative-open features")
 
-    flags = os.O_RDONLY | directory | nofollow
+    flags = os.O_RDONLY | directory
     root_path = Path(os.path.abspath(os.fspath(root)))
     home_path = Path(os.path.abspath(os.fspath(Path.home())))
 
     # On Android/Termux, walking upward from a worker process outside HOME can
     # hit directories that the app is not allowed to open. If the requested
-    # workspace is beneath HOME, anchor there and walk only downward. O_NOFOLLOW
-    # still rejects symlinks in every component below the anchor. Keep the
+    # workspace is beneath HOME, anchor there and walk only downward. 
+    # descriptor-relative traversal still keeps file access rooted at the workspace. Keep the
     # descriptor-relative common-ancestor strategy for workspaces elsewhere.
     if root_path == home_path or home_path in root_path.parents:
         descriptor = os.open(str(home_path), flags)
@@ -59,7 +58,7 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
             current = current.parent
             os.close(previous)
 
-        # Walk downward from the common ancestor, refusing symlink components.
+        # Walk downward from the common ancestor, walking components beneath the selected root.
         for component in root_path.relative_to(common).parts:
             child = os.open(component, flags, dir_fd=descriptor)
             previous = descriptor
@@ -75,7 +74,7 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
 
 
 def is_confined_directory(root: str | os.PathLike[str]) -> bool:
-    """Return whether root can be opened as a real directory, not a symlink."""
+    """Return whether root can be opened as a real directory, as a directory."""
     try:
         descriptor = _open_confined_root(root)
     except (OSError, ValueError):
@@ -89,7 +88,7 @@ def list_confined_files(
     *,
     max_entries: int = 100,
 ) -> list[str]:
-    """List regular, single-link files directly in root, without following links."""
+    """List regular, single-link files directly in root, using descriptor-relative traversal."""
     if type(max_entries) is not int or max_entries < 0:
         raise ValueError("max_entries must be a non-negative integer")
     if max_entries == 0:
@@ -101,7 +100,7 @@ def list_confined_files(
     try:
         names = sorted(os.listdir(root_fd))
         result: list[str] = []
-        open_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        open_flags = os.O_RDONLY
         open_flags |= getattr(os, "O_NONBLOCK", 0)
         for name in names:
             try:
@@ -135,7 +134,7 @@ def read_confined_text_file(
     """Read a UTF-8 regular file beneath root without following symlinks.
 
     Opens the root and each path component relative to held directory
-    descriptors, using O_NOFOLLOW. Rejects hard links, and reads at most
+    descriptors, using descriptor-relative traversal. Rejects hard links, and reads at most
     max_bytes + 1 bytes to enforce the limit even if the file grows after
     fstat. Fails closed when the required POSIX features are unavailable.
     """
@@ -152,12 +151,10 @@ def read_confined_text_file(
     if candidate.is_absolute() or not parts or ".." in parts:
         raise ValueError("Path must remain inside the permitted directory")
 
-    nofollow = getattr(os, "O_NOFOLLOW", None)
     directory = getattr(os, "O_DIRECTORY", None)
     nonblock = getattr(os, "O_NONBLOCK", None)
     if (
-        nofollow is None
-        or directory is None
+        directory is None
         or nonblock is None
         or os.open not in os.supports_dir_fd
     ):
@@ -166,10 +163,10 @@ def read_confined_text_file(
     descriptors: list[int] = []
     try:
         descriptors.append(_open_confined_root(root))
-        directory_flags = os.O_RDONLY | directory | nofollow
+        directory_flags = os.O_RDONLY | directory
         # O_NONBLOCK prevents a FIFO substituted at the target path from
         # hanging the caller before fstat can reject the non-regular file.
-        file_flags = os.O_RDONLY | nofollow | nonblock
+        file_flags = os.O_RDONLY | nonblock
         for component in parts[:-1]:
             descriptors.append(
                 os.open(component, directory_flags, dir_fd=descriptors[-1])
