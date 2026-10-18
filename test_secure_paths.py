@@ -34,6 +34,32 @@ class ConfinedReadTests(unittest.TestCase):
     def read(self, path: str, max_bytes: int = 200_000) -> str:
         return read_confined_text_file(self.root, path, max_bytes=max_bytes)
 
+    def test_home_anchored_root_does_not_walk_upward(self) -> None:
+        home = Path(self.temp.name) / "home"
+        home.mkdir()
+        root = home / "repo"
+        root.mkdir()
+        real_open = os.open
+
+        def deny_parent_open(path, flags, *args, **kwargs):
+            if path == "..":
+                raise PermissionError("simulated Android parent traversal denial")
+            return real_open(path, flags, *args, **kwargs)
+
+        with (
+            patch("authoritylab.secure_paths.Path.home", return_value=home),
+            patch("authoritylab.secure_paths.os.getcwd", return_value=str(self.temp.name)),
+            patch("authoritylab.secure_paths.os.open", side_effect=deny_parent_open) as open_mock,
+            patch("authoritylab.secure_paths.os.supports_dir_fd", {open_mock}),
+        ):
+            descriptor = self._open_root_for_test(root)
+            os.close(descriptor)
+
+    @staticmethod
+    def _open_root_for_test(root: Path) -> int:
+        from authoritylab.secure_paths import _open_confined_root
+        return _open_confined_root(root)
+
     def test_rejects_symlinked_root(self) -> None:
         alias = Path(self.temp.name) / "root-link"
         try:
