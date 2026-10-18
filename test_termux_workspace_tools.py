@@ -127,6 +127,38 @@ class BoundedWorkspaceTests(unittest.TestCase):
             self.root.resolve(), "README.md", max_bytes=MAX_FILE_BYTES
         )
 
+    def test_read_file_reports_safe_size_or_type_rejection(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=ValueError("private path and size details"),
+        ):
+            with self.assertRaisesRegex(
+                WorkspaceError, "safe-read validation; check size and file type"
+            ) as raised:
+                self.workspace.read_file("README.md")
+        self.assertNotIn("private path", str(raised.exception))
+
+    def test_read_file_reports_invalid_utf8_without_raw_details(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=UnicodeError("private decoding details"),
+        ):
+            with self.assertRaisesRegex(WorkspaceError, "not valid UTF-8 text") as raised:
+                self.workspace.read_file("README.md")
+        self.assertNotIn("private decoding", str(raised.exception))
+
+    def test_read_file_reports_safe_open_failure_without_path_details(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=PermissionError(13, "private path detail"),
+        ):
+            with self.assertRaisesRegex(
+                WorkspaceError, "safe file open failed; check path, permissions"
+            ) as raised:
+                self.workspace.read_file("README.md")
+        self.assertNotIn("private path detail", str(raised.exception))
+
+
     def test_read_file_rejects_symlink_even_if_path_precheck_is_bypassed(self):
         outside = Path(self.temp.name) / "outside.txt"
         outside.write_text("do not disclose", encoding="utf-8")
