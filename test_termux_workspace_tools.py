@@ -32,6 +32,14 @@ class BoundedWorkspaceTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_checked_in_capability_registry_fits_safe_read_limit(self):
+        registry_path = Path(__file__).with_name("capability-registry.json")
+        self.assertTrue(registry_path.is_file())
+        self.assertLessEqual(registry_path.stat().st_size, MAX_FILE_BYTES)
+        with registry_path.open("r", encoding="utf-8") as stream:
+            registry = json.load(stream)
+        self.assertIsInstance(registry, (dict, list))
+
     def test_status_has_fixed_allowlist(self):
         status = self.workspace.status()
         self.assertTrue(status["ready"])
