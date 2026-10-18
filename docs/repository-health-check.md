@@ -6,7 +6,7 @@ Run from the repository root:
 
 ```bash
 python scripts/repository_health_check.py
-python -m unittest -v tests.test_repository_health_check
+python -m unittest discover -s tests -p 'test_repository_health_check.py' -v
 ```
 
 The checker verifies that required governance, architecture, verification, CI, schema, and test artifacts exist. It also checks the capability registry's schema-version marker, inventory-only status, entry count, unique nonempty tool IDs, provider counts, and explicit `execution_verified: false` declarations.
