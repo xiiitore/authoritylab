@@ -6,19 +6,24 @@ Android phone directly to the ChatGPT mobile session.
 
 ## Exposed tools
 
-- `status`: configured repository root and fixed tool allowlist.
-- `list_files`: at most 200 direct entries; skips common generated directories
-  and symbolic links.
-- `read_file`: UTF-8 files within the repository, maximum 200 KB.
-- `write_file`: write or replace UTF-8 files within the repository, maximum
-  200 KB. Parent directories must already exist.
-- `git_status` and `git_diff`: inspect repository state.
-- `run_tests`: runs only `python -m unittest discover -v`, with a timeout.
+The installed server `python -m authoritylab.termux_mcp_server` exposes exactly
+four tools:
 
-There is no generic shell tool, arbitrary command input, network client, Git
-push, Git commit, credential access, or access to paths outside the configured
-repository. The test runner executes code from the checkout; only use it with a
-repository you trust.
+- `status`: bounded workspace readiness and file-size limit.
+- `list_files`: at most 100 direct file names; excludes directories and unsafe
+  entries.
+- `read_file`: UTF-8 files within the configured repository, maximum 200 KB.
+- `diagnostics`: bounded runtime metadata; it does not return file contents.
+
+It does **not** expose `write_file`, `git_status`, `git_diff`, or `run_tests`.
+Those names may exist as internal `BoundedWorkspace` methods, but they are not
+MCP endpoints in this server. The separate example
+`examples/termux_mcp_server_authoritylab.py` exposes only the three read-only
+tools `status`, `list_files`, and `read_file`.
+
+Neither server exposes a generic shell tool, arbitrary command input, Git push,
+Git commit, or credential access. Reads remain confined to the configured
+workspace.
 
 ## SDK compatibility
 
@@ -44,9 +49,7 @@ PYTHONPATH="$SITE_DIR" python examples/check_termux_workspace_stdio.py || exit 1
 PYTHONPATH="$SITE_DIR" python -m unittest discover -v
 ```
 
-The first smoke test checks the three-tool read-only reference server. The second checks the separate seven-tool workspace server against a disposable Git repository, including bounded write/read and path/symlink/hard-link rejection. A hard-link `SKIP` means that filesystem did not permit the test; it is not a PASS. Keep the audit checkout and target directory until the output has been reviewed.
-
-For the bounded workspace server (seven tools), the repository now includes `examples/check_termux_workspace_stdio.py`. It launches the server against a fresh temporary Git repository and checks the tool allowlist, status/list/read/write, git status/diff, test runner, parent-traversal rejection, symlink rejection, and hard-link write rejection where the filesystem supports hard links. It does not touch the user's actual checkout. The three-tool `check_termux_mcp_stdio.py` remains a separate read-only reference-server test.
+The first smoke test checks the three-tool read-only example server. The second checks the installed four-tool server against a disposable Git repository: status, list, read, bounded diagnostics, and parent-traversal rejection. It also verifies that `write_file` is not exposed. It does not touch the user's actual checkout. Keep the audit checkout and target directory until the output has been reviewed.
 
 ## Install in Termux
 
@@ -77,8 +80,9 @@ codex mcp list
 ```
 
 Restart Codex CLI after adding the server if it was already running. Confirm
-the server tools appear, then test `status`, `git_status`, and `read_file`
-before using `write_file` or `run_tests`.
+that exactly `status`, `list_files`, `read_file`, and `diagnostics` appear.
+Do not expect `write_file`, `git_status`, `git_diff`, or `run_tests` to be
+available through this server.
 
 If your venv is not `~/mcp-venv`, activate the actual environment where the
 `mcp` package was installed. Do not put access tokens or passwords into this
@@ -89,9 +93,9 @@ repository or into the command history.
 This is least-privilege application logic, not a kernel-enforced sandbox.
 Path checks reject absolute paths, parent traversal, backslashes, NULs, and
 symbolic links, but they are not race-free against a hostile concurrent local
-process. Test execution has a timeout but still runs as the Termux user.
-Restrict `AUTHORITYLAB_ROOT` to the repository, not all of `$HOME` or shared
-storage. Review diffs before committing or pushing.
+process. The server does not expose a test runner or mutation operations.
+Restrict `AUTHORITYLAB_ROOT` to the intended repository, not all of `$HOME` or
+shared storage.
 
 A stdio MCP server is local to its host process. Connecting it to ChatGPT from
 outside Termux requires a separate supported remote MCP endpoint or secure
