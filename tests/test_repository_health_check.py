@@ -78,6 +78,27 @@ class RepositoryHealthCheckTests(unittest.TestCase):
             (root / "architecture.md").unlink()
             self.assertIn("required file missing: architecture.md", check_repository(root))
 
+    def test_provider_count_mismatch_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._make_repo(root)
+            path = root / "capability-registry.json"
+            registry = json.loads(path.read_text(encoding="utf-8"))
+            registry["provider_counts"] = {"local": 1}
+            path.write_text(json.dumps(registry), encoding="utf-8")
+            self.assertIn(
+                "capability registry: provider_counts does not match tools entries",
+                check_repository(root),
+            )
+
+    def test_malformed_registry_json_is_reported_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._make_repo(root)
+            (root / "capability-registry.json").write_text("{broken", encoding="utf-8")
+            errors = check_repository(root)
+            self.assertTrue(any("cannot read valid UTF-8 JSON" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
