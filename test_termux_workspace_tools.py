@@ -275,5 +275,47 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.assertNotIn("Traceback", message)
 
 
+    def test_read_file_maps_invalid_utf8_to_bounded_error(self):
+        error = UnicodeDecodeError("utf-8", b"\\xff", 0, 1, "invalid start byte")
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=error,
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.read_file("README.md")
+
+        self.assertEqual(str(raised.exception), "file is not valid UTF-8 text")
+        self.assertNotIn("Traceback", str(raised.exception))
+
+    def test_read_file_maps_validation_error_to_bounded_error(self):
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=ValueError("oversized sensitive path"),
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.read_file("README.md")
+
+        self.assertEqual(
+            str(raised.exception),
+            "file rejected by safe-read validation; check size and file type",
+        )
+        self.assertNotIn("oversized sensitive path", str(raised.exception))
+
+    def test_read_file_maps_os_error_without_exposing_filename(self):
+        error = PermissionError(13, "permission denied", "TOKEN_SENTINEL")
+        with patch(
+            "authoritylab.termux_workspace_tools.read_confined_text_file",
+            side_effect=error,
+        ):
+            with self.assertRaises(WorkspaceError) as raised:
+                self.workspace.read_file("README.md")
+
+        self.assertEqual(
+            str(raised.exception),
+            "safe file open failed; check path, permissions, or platform support",
+        )
+        self.assertNotIn("TOKEN_SENTINEL", str(raised.exception))
+        self.assertNotIn("Traceback", str(raised.exception))
+
 if __name__ == "__main__":
     unittest.main()
