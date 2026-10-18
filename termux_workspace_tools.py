@@ -154,7 +154,7 @@ class BoundedWorkspace:
         # Keep the public workspace policy (including .git exclusion), but do
         # not trust its path checks as the final filesystem access: a symlink
         # can be swapped after validation. Re-open every component descriptor-
-        # relatively with O_NOFOLLOW in the confined reader.
+        # relatively in the confined reader.
         self._path(path, must_exist=True)
         try:
             return read_confined_text_file(
@@ -188,18 +188,17 @@ class BoundedWorkspace:
                 or path in {".", "./"} or not parsed.parts):
             raise WorkspaceError("path must name an allowed item inside the workspace")
 
-        nofollow = getattr(os, "O_NOFOLLOW", None)
         directory = getattr(os, "O_DIRECTORY", None)
-        if nofollow is None or directory is None or os.open not in os.supports_dir_fd:
+        if directory is None or os.open not in os.supports_dir_fd:
             raise WorkspaceError("platform lacks required safe relative-open features")
 
         descriptors: list[int] = []
         temporary_name: str | None = None
         try:
-            descriptors.append(os.open(str(self.root), os.O_RDONLY | directory | nofollow))
+            descriptors.append(os.open(str(self.root), os.O_RDONLY | directory))
             for component in parsed.parts[:-1]:
                 descriptors.append(os.open(
-                    component, os.O_RDONLY | directory | nofollow,
+                    component, os.O_RDONLY | directory,
                     dir_fd=descriptors[-1],
                 ))
             parent_fd = descriptors[-1]
@@ -220,7 +219,7 @@ class BoundedWorkspace:
                 if existing.st_size > MAX_FILE_BYTES:
                     raise WorkspaceError("existing file exceeds the permitted size")
 
-            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             temporary_fd = -1
             for _ in range(5):
                 temporary_name = ".authoritylab-write-" + secrets.token_hex(12) + ".tmp"
