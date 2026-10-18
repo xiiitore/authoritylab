@@ -28,6 +28,25 @@ class ConfinedReadTests(unittest.TestCase):
         self.outside = Path(self.temp.name) / "outside.txt"
         self.outside.write_text("outside", encoding="utf-8")
 
+    def test_workspace_under_home_uses_home_as_open_anchor(self) -> None:
+        home = self.root.parent
+        real_open = os.open
+        opened_paths = []
+
+        def recording_open(path, flags, *args, **kwargs):
+            opened_paths.append(path)
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch("authoritylab.secure_paths.Path.home", return_value=home):
+            with patch("authoritylab.secure_paths.os.open", side_effect=recording_open) as patched_open:
+                with patch(
+                    "authoritylab.secure_paths.os.supports_dir_fd",
+                    set(os.supports_dir_fd) | {patched_open},
+                ):
+                    self.assertTrue(is_confined_directory(self.root))
+
+        self.assertEqual(opened_paths[0], str(home))
+
     def tearDown(self) -> None:
         self.temp.cleanup()
 
