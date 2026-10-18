@@ -55,11 +55,12 @@ def build_server() -> MCPServer:
 
         try:
             if kind == "status":
+                workspace_status = workspace.status()
                 result = {
-                    "status": "ready" if workspace.status().get("ready") is True else "not_ready",
+                    "status": "ready" if workspace_status.get("ready") is True else "not_ready",
                     "directory_exists": root.is_dir(),
                     "directory": str(root),
-                    "max_file_bytes": workspace.status().get("max_file_bytes"),
+                    "max_file_bytes": workspace_status.get("max_file_bytes"),
                 }
             elif kind == "list_files":
                 result = [
