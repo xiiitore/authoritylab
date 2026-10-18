@@ -63,6 +63,22 @@ class TaskValidationTests(unittest.TestCase):
             mailbox.parse_task(task_body(self.valid_task(
                 action="read_file", arguments={"path": "../secret"})))
 
+    def test_read_file_line_range_is_validated(self):
+        valid = self.valid_task(action="read_file", arguments={
+            "path": "README.md", "start_line": 1, "end_line": 2})
+        self.assertEqual(mailbox.parse_task(task_body(valid))["arguments"]["start_line"], 1)
+        invalid_args = [
+            {"path": "README.md", "start_line": 1},
+            {"path": "README.md", "start_line": 0, "end_line": 1},
+            {"path": "README.md", "start_line": 2, "end_line": 1},
+            {"path": "README.md", "start_line": True, "end_line": 2},
+            {"path": "README.md", "start_line": 1, "end_line": 501},
+        ]
+        for arguments in invalid_args:
+            invalid = self.valid_task(action="read_file", arguments=arguments)
+            with self.assertRaisesRegex(mailbox.MailboxError, "read_file_line_range_invalid"):
+                mailbox.parse_task(task_body(invalid))
+
     def test_write_file_requires_exact_arguments_and_confined_path(self):
         valid = self.valid_task(action="write_file", arguments={"path": "README.md", "content": "safe"})
         self.assertEqual(mailbox.parse_task(task_body(valid))["action"], "write_file")
@@ -108,6 +124,14 @@ class TaskValidationTests(unittest.TestCase):
     def test_read_file_returns_bounded_content(self):
         task = self.valid_task(action="read_file", arguments={"path": "README.md"})
         self.assertEqual(mailbox.execute_task(FakeWorkspace(), task)["content"], "safe content")
+
+    def test_read_file_line_range_returns_bounded_slice_and_metadata(self):
+        task = self.valid_task(action="read_file", arguments={
+            "path": "README.md", "start_line": 1, "end_line": 1})
+        self.assertEqual(mailbox.execute_task(FakeWorkspace(), task), {
+            "path": "README.md", "start_line": 1, "end_line": 1,
+            "total_lines": 1, "content": "safe content",
+        })
 
     def test_large_file_result_rejected(self):
         workspace = FakeWorkspace()
