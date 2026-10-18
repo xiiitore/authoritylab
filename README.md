@@ -16,13 +16,14 @@ These module names describe this repository only. They do not imply access to ex
 
 Python 3.11 or newer. Runtime code uses the standard library. The durable audit log uses POSIX `flock` and is supported only on local filesystems with reliable locking semantics.
 
-From the repository root:
+From the repository root, run the fast structural preflight before the full suite:
 
 ```bash
+python scripts/repository_health_check.py
 python -m unittest -v test_workflow test_audit_log test_audit_integration test_semantic_validation test_subprocess_runner
 ```
 
-CI also installs the project and runs the test suite using pytest. The import package is configured in `pyproject.toml`.
+The preflight checks required project artifacts and capability-registry invariants; it is not a security audit or a substitute for the test suite. CI also installs the project, runs the preflight, and executes pytest. The import package is configured in `pyproject.toml`.
 
 ## Loop and unsupported-execution-claim guardrails
 
