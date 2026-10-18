@@ -275,5 +275,19 @@ class BoundedWorkspaceTests(unittest.TestCase):
         self.assertNotIn("Traceback", message)
 
 
+    def test_read_file_reports_size_rejection_without_generic_error(self):
+        (self.root / "oversized.txt").write_bytes(b"x" * (MAX_FILE_BYTES + 1))
+        with self.assertRaises(WorkspaceError) as raised:
+            self.workspace.read_file("oversized.txt")
+        self.assertIn("safe-read validation", str(raised.exception))
+        self.assertNotIn("Traceback", str(raised.exception))
+
+    def test_read_file_reports_invalid_utf8_separately(self):
+        (self.root / "invalid-utf8.txt").write_bytes(b"\\xff")
+        with self.assertRaises(WorkspaceError) as raised:
+            self.workspace.read_file("invalid-utf8.txt")
+        self.assertEqual(str(raised.exception), "file is not valid UTF-8 text")
+
+
 if __name__ == "__main__":
     unittest.main()
