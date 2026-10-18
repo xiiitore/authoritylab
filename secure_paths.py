@@ -18,8 +18,29 @@ def _open_confined_root(root: str | os.PathLike[str]) -> int:
 
     flags = os.O_RDONLY | directory | nofollow
     root_path = Path(os.path.abspath(os.fspath(root)))
-    cwd_path = Path(os.path.realpath(os.getcwd()))
+    home_path = Path(os.path.abspath(os.fspath(Path.home())))
 
+    # On Android/Termux, walking upward from a worker process outside HOME can
+    # hit directories that the app is not allowed to open. If the requested
+    # workspace is beneath HOME, anchor there and walk only downward. O_NOFOLLOW
+    # still rejects symlinks in every component below the anchor. Keep the
+    # descriptor-relative common-ancestor strategy for workspaces elsewhere.
+    if root_path == home_path or home_path in root_path.parents:
+        descriptor = os.open(str(home_path), flags)
+        try:
+            for component in root_path.relative_to(home_path).parts:
+                child = os.open(component, flags, dir_fd=descriptor)
+                previous = descriptor
+                descriptor = child
+                os.close(previous)
+            if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                raise ValueError("Permitted root must be a directory")
+            return descriptor
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+    cwd_path = Path(os.path.realpath(os.getcwd()))
     try:
         common = Path(os.path.commonpath((str(root_path), str(cwd_path))))
     except ValueError as exc:
