@@ -57,9 +57,22 @@ def parse_task(body: str) -> dict[str, Any]:
     if task["action"] in {"status", "list_files", "git_status", "git_diff", "run_tests"} and task["arguments"]:
         raise MailboxError("unexpected_arguments")
     if task["action"] == "read_file":
-        if set(task["arguments"]) != {"path"} or not isinstance(task["arguments"]["path"], str):
+        args = task["arguments"]
+        if not {"path"}.issubset(args) or not set(args).issubset(
+            {"path", "start_line", "end_line"}
+        ) or not isinstance(args["path"], str):
             raise MailboxError("read_file_arguments_invalid")
-        path = task["arguments"]["path"]
+        has_start = "start_line" in args
+        has_end = "end_line" in args
+        if has_start != has_end:
+            raise MailboxError("read_file_line_range_invalid")
+        if has_start:
+            start_line, end_line = args["start_line"], args["end_line"]
+            if (type(start_line) is not int or type(end_line) is not int
+                    or start_line < 1 or end_line < start_line
+                    or end_line - start_line > 499):
+                raise MailboxError("read_file_line_range_invalid")
+        path = args["path"]
         normalized = path.replace("\\", "/")
         if (not path or len(path) > 1024 or "\x00" in path
                 or path.startswith("/") or any(part == ".." for part in normalized.split("/"))):
@@ -202,6 +215,17 @@ def execute_task(workspace: BoundedWorkspace, task: dict[str, Any]) -> dict[str,
         value = workspace.read_file(args["path"])
         if not isinstance(value, str):
             raise MailboxError("file_result_invalid")
+        if "start_line" in args:
+            lines = value.splitlines(keepends=True)
+            start_line, end_line = args["start_line"], args["end_line"]
+            value = "".join(lines[start_line - 1:end_line])
+            if len(value) > MAX_RESULT_CHARS:
+                raise MailboxError("file_result_too_large")
+            return {
+                "path": args["path"], "start_line": start_line,
+                "end_line": min(end_line, len(lines)), "total_lines": len(lines),
+                "content": value,
+            }
         if len(value) > MAX_RESULT_CHARS:
             raise MailboxError("file_result_too_large")
         return {"path": args["path"], "content": value}
