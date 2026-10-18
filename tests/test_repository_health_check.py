@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.repository_health_check import check_repository
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts.repository_health_check import check_repository  # noqa: E402
 
 
 class RepositoryHealthCheckTests(unittest.TestCase):
