@@ -162,9 +162,15 @@ class BoundedWorkspace:
             )
         except WorkspaceError:
             raise
-        except (OSError, UnicodeError, ValueError) as exc:
+        except UnicodeError:
+            raise WorkspaceError("file is not valid UTF-8 text") from None
+        except ValueError:
             raise WorkspaceError(
-                f"file could not be read safely: {type(exc).__name__}"
+                "file rejected by safe-read validation; check size and file type"
+            ) from None
+        except OSError:
+            raise WorkspaceError(
+                "safe file open failed; check path, permissions, or platform support"
             ) from None
 
     def write_file(self, path: str, content: str) -> dict[str, Any]:
