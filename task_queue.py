@@ -19,6 +19,9 @@ from typing import Any
 from authoritylab.privacy import redact_sensitive_data
 
 
+MAX_JSON_BYTES = 1_000_000
+
+
 class QueueError(RuntimeError):
     """Base error for task queue operations."""
 
@@ -49,9 +52,14 @@ def _json_object(value: Any, name: str) -> str:
     if not isinstance(value, dict):
         raise TypeError(f"{name} must be a dict")
     try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        encoded = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{name} must contain finite JSON-compatible values") from exc
+    if len(encoded.encode("utf-8")) > MAX_JSON_BYTES:
+        raise ValueError(f"{name} exceeds size limit of {MAX_JSON_BYTES} UTF-8 bytes")
+    return encoded
 
 
 def _positive_finite(value: Any, name: str) -> float:
@@ -61,6 +69,12 @@ def _positive_finite(value: Any, name: str) -> float:
     if not math.isfinite(number) or number <= 0:
         raise ValueError(f"{name} must be a positive finite number")
     return number
+
+
+def _valid_attempt_count(value: Any) -> int:
+    if type(value) is not int or value < 1:
+        raise ValueError("attempt_count must be a positive integer from the claimed task")
+    return value
 
 
 class DurableTaskQueue:
@@ -198,21 +212,23 @@ class DurableTaskQueue:
         return self._decode(claimed)
 
     def _mutate_live_lease(
-        self, task_id: str, worker_id: str, assignments: str, values: tuple[Any, ...],
+        self, task_id: str, worker_id: str, attempt_count: int,
+        assignments: str, values: tuple[Any, ...],
     ) -> Task:
+        attempt = _valid_attempt_count(attempt_count)
         now = float(self._clock())
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """SELECT task_id FROM tasks WHERE task_id=? AND status='running'
-                   AND lease_owner=? AND lease_expires_at > ?""",
-                (task_id, worker_id, now),
+                   AND lease_owner=? AND attempt_count=? AND lease_expires_at > ?""",
+                (task_id, worker_id, attempt, now),
             ).fetchone()
             if row is None:
-                raise LeaseLost(f"no live lease for task {task_id!r}")
+                raise LeaseLost(f"no live lease for task {task_id!r} and attempt {attempt}")
             connection.execute(
-                f"UPDATE tasks SET {assignments}, updated_at=? WHERE task_id=?",
-                (*values, now, task_id),
+                f"UPDATE tasks SET {assignments}, updated_at=? WHERE task_id=? AND attempt_count=?",
+                (*values, now, task_id, attempt),
             )
             updated = connection.execute(
                 "SELECT * FROM tasks WHERE task_id=?", (task_id,)
@@ -220,30 +236,40 @@ class DurableTaskQueue:
             connection.commit()
         return self._decode(updated)
 
-    def heartbeat(self, task_id: str, worker_id: str, *, lease_seconds: float = 60) -> Task:
+    def heartbeat(
+        self, task_id: str, worker_id: str, *, attempt_count: int,
+        lease_seconds: float = 60,
+    ) -> Task:
         lease = _positive_finite(lease_seconds, "lease_seconds")
         return self._mutate_live_lease(
-            task_id, worker_id, "lease_expires_at=?",
+            task_id, worker_id, attempt_count, "lease_expires_at=?",
             (float(self._clock()) + lease,),
         )
 
-    def checkpoint(self, task_id: str, worker_id: str, checkpoint: dict[str, Any]) -> Task:
+    def checkpoint(
+        self, task_id: str, worker_id: str, checkpoint: dict[str, Any], *,
+        attempt_count: int,
+    ) -> Task:
         return self._mutate_live_lease(
-            task_id, worker_id, "checkpoint_json=?",
+            task_id, worker_id, attempt_count, "checkpoint_json=?",
             (_json_object(checkpoint, "checkpoint"),),
         )
 
-    def complete(self, task_id: str, worker_id: str, result: dict[str, Any]) -> Task:
+    def complete(
+        self, task_id: str, worker_id: str, result: dict[str, Any], *,
+        attempt_count: int,
+    ) -> Task:
         return self._mutate_live_lease(
-            task_id, worker_id,
+            task_id, worker_id, attempt_count,
             "status='succeeded', result_json=?, lease_owner=NULL, lease_expires_at=NULL",
             (_json_object(result, "result"),),
         )
 
     def fail(
         self, task_id: str, worker_id: str, error: str, *,
-        retryable: bool = True, retry_delay: float = 0,
+        attempt_count: int, retryable: bool = True, retry_delay: float = 0,
     ) -> Task:
+        attempt = _valid_attempt_count(attempt_count)
         if not isinstance(error, str) or not error.strip():
             raise ValueError("error must be a non-empty string")
         if type(retryable) is not bool:
@@ -259,17 +285,18 @@ class DurableTaskQueue:
             row = connection.execute(
                 """SELECT attempt_count, max_attempts FROM tasks
                    WHERE task_id=? AND status='running' AND lease_owner=?
-                     AND lease_expires_at > ?""",
-                (task_id, worker_id, now),
+                     AND attempt_count=? AND lease_expires_at > ?""",
+                (task_id, worker_id, attempt, now),
             ).fetchone()
             if row is None:
-                raise LeaseLost(f"no live lease for task {task_id!r}")
+                raise LeaseLost(f"no live lease for task {task_id!r} and attempt {attempt}")
             retry = retryable and row["attempt_count"] < row["max_attempts"]
             connection.execute(
                 """UPDATE tasks SET status=?, available_at=?, last_error=?,
-                   lease_owner=NULL, lease_expires_at=NULL, updated_at=? WHERE task_id=?""",
+                   lease_owner=NULL, lease_expires_at=NULL, updated_at=?
+                   WHERE task_id=? AND attempt_count=?""",
                 ("pending" if retry else "failed", now + delay if retry else now,
-                 str(redact_sensitive_data(error.strip()))[:2000], now, task_id),
+                 str(redact_sensitive_data(error.strip()))[:2000], now, task_id, attempt),
             )
             updated = connection.execute(
                 "SELECT * FROM tasks WHERE task_id=?", (task_id,)
