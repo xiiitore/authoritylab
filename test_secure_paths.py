@@ -28,6 +28,25 @@ class ConfinedReadTests(unittest.TestCase):
         self.outside = Path(self.temp.name) / "outside.txt"
         self.outside.write_text("outside", encoding="utf-8")
 
+    def test_confined_root_uses_open_current_directory_anchor(self) -> None:
+        real_open = os.open
+        opened_paths = []
+
+        def recording_open(path, flags, *args, **kwargs):
+            opened_paths.append(path)
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch("authoritylab.secure_paths.os.open", side_effect=recording_open) as patched_open:
+            with patch(
+                "authoritylab.secure_paths.os.supports_dir_fd",
+                set(os.supports_dir_fd) | {patched_open},
+            ):
+                self.assertTrue(is_confined_directory(self.root))
+
+        # The implementation anchors traversal at an already-open cwd descriptor
+        # rather than opening the filesystem root by absolute path (important on Termux).
+        self.assertEqual(opened_paths[0], ".")
+
     def tearDown(self) -> None:
         self.temp.cleanup()
 

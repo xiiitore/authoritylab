@@ -1,11 +1,23 @@
 # Capability Matrix — Evidence Snapshot
 
+> The original matrix below is a historical snapshot from 2026-10-11, not a live status page. The dated follow-up below records later observations without rewriting the historical evidence.
+
+## Follow-up — 2026-10-18
+
+- **Draft PR #80:** [Improve repository preflight and Termux bridge efficiency](https://github.com/xiiitore/authoritylab/pull/80) is open and unmerged. It adds a dependency-free repository health preflight, wires it into Python CI, corrects Termux MCP capability documentation, adds a confined-path anchor regression test, and removes a duplicate `workspace.status()` call.
+- **Latest verified implementation/documentation head at this review point:** `c47780aa4f233247c47505d5445fbb9f035f29f0` passed Python CI, CodeQL, and Docker sandbox integration. The Python 3.13 suite reported 291 passed and 3 skipped on the preceding implementation head `f971513831623485d496ac4fb1279160c5314257`; the `c47780a` commit corrected the Termux MCP capability documentation. Later changes in this draft PR update the evidence matrix itself; check [PR #80](https://github.com/xiiitore/authoritylab/pull/80) for CI status on the current head.
+- **Termux mailbox:** `status` returned `ready` with a 200,000-byte file limit. Sequential `read_file` checks succeeded for multiple existing files. The mailbox protocol permits only `status`, `list_files`, and `read_file`; it cannot execute tests or Git commands.
+- **Local/GitHub divergence:** the Termux workspace does not contain `scripts/repository_health_check.py` yet (`FileNotFoundError`). Its `termux_mcp_server.py` also differs from the GitHub `main` version inspected in this session. The mailbox does not expose the local branch or commit SHA, so the exact divergence point is **UNKNOWN**. Device-side execution of the new preflight is therefore **NOT VERIFIED**.
+- **Local backup artifact:** the workspace listing contains `secure_paths.py.bak`; its content lacks the home-anchor adjustment present in the current local `secure_paths.py`. It was inspected but not deleted or modified. The file was not present in the inspected GitHub `main` tree.
+
+The historical table and gates below retain the evidence and limitations known on 2026-10-11.
+
 **Snapshot date:** 2026-10-11  
 **Scope:** current ChatGPT session, connected GitHub integration, AuthorityLab repository, and the current OVERALGORITHM plugin listing.
 
 This matrix distinguishes registered interfaces from capabilities that have actually been exercised. A PASS applies only to the stated test and version/commit, not to an entire provider or system.
 
-## Current status
+## Status at snapshot date (2026-10-11)
 
 | Capability | Status | Evidence / limit |
 |---|---|---|
@@ -28,7 +40,7 @@ This matrix distinguishes registered interfaces from capabilities that have actu
 4. [#32 — Align Termux MCP bridge and smoke test with SDK v2](https://github.com/xiiitore/authoritylab/pull/32) — merged as `6ece6d4` from a clean branch based on updated main.
 5. [Private audit PR #3 — OVERALGORITHM v1.2.12 schema/contract tests](https://github.com/xiiitore/authority-boundary-lab/pull/3) — draft only, private repo; 51 tests passed on the candidate audit snapshot, not a plugin release.
 
-## Next gates
+## Next gates as of the snapshot date (2026-10-11)
 
 1. Wait for post-merge CodeQL on `6ece6d4` to finish and confirm success.
 2. Run the documented stdio, hard-link, and write-safety checks on the actual Termux device in a fresh checkout and the user's actual MCP virtual environment.
