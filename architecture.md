@@ -159,9 +159,15 @@ requests. It disables access logging, sets `Cache-Control: no-store`, adds
 single-user and text-only. It has no UI, streaming, attachments, external
 tools, or conversation chaining yet.
 
-`SQLiteIdempotencyStore` uses a private regular file, `O_NOFOLLOW`,
-0600 permissions, SQLite full synchronous writes, and an immediate
-transaction for atomic claims. It stores only a SHA-256 hash of the
+`SQLiteIdempotencyStore` walks parent directories from the filesystem root
+using descriptor-relative `openat`-style operations and `O_NOFOLLOW`, pins
+the final private (owner-only 0700) directory descriptor, and directs SQLite
+through `/proc/self/fd/<dirfd>/<filename>` so later path replacement cannot
+redirect database connections. The database must be an owned, single-link
+regular file with 0600 permissions; FIFO/device/symlink/hard-link targets are
+rejected. The host therefore requires Linux/Android procfs and descriptor-
+relative filesystem support. SQLite uses full synchronous writes and an
+immediate transaction for atomic claims. It stores only a SHA-256 hash of the
 idempotency key, the inbound request digest, status, and timestamps; it does
 not persist prompts or model output. Reuse with a different request conflicts.
 A stale `IN_PROGRESS` claim becomes `UNKNOWN`, never a fresh claim. A
