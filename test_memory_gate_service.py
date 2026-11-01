@@ -194,7 +194,7 @@ class MemoryGateServiceTests(unittest.TestCase):
         )
 
     def test_invalid_unicode_is_rejected_before_claim(self):
-        status, body = self.call(payload={"input": "\\ud800"})
+        status, body = self.call(payload={"input": "\ud800"})
         self.assertEqual(status, 400)
         self.assertEqual(body["reason"], "invalid_unicode")
         self.assertEqual(self.opener.requests, [])
