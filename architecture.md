@@ -108,3 +108,34 @@ subject scoping, bounded context, and environment configuration. No live Notion
 API credential has been supplied, so live authentication and retrieval remain
 untested. The provider currently loads all rows from the small configured memory
 data sources; relevance ranking and caching are intentionally deferred.
+
+
+### Gated OpenAI Responses API adapter (experimental)
+
+`OpenAIResponsesClient` is a text-only adapter for `POST /v1/responses`.
+It requires `OPENAI_API_KEY`, an explicitly configured `OPENAI_MODEL`, and
+a gate-token verifier. Before sending any request it recomputes the exact
+outbound payload digest and verifies the signed gate token against the
+`GateRequest`; payload substitution or an invalid/expired token is rejected
+before network access.
+
+The adapter accepts only two plain user messages (the actual request and a
+JSON-encoded memory context), fixed server instructions, a bounded
+`max_output_tokens`, and `store=false`. It rejects tools, streaming,
+conversation chaining, arbitrary extra fields, and client-selected models.
+It never retries a model POST. A network timeout or 5xx response is
+`UNKNOWN` because the request may already have been processed; known 4xx
+errors are recorded as `FAIL`.
+
+`store=false` disables Responses API application-state storage for the
+request, but it does **not** by itself guarantee zero data retention: default
+abuse-monitoring logs may still contain customer content and be retained for
+up to 30 days. Zero Data Retention or Modified Abuse Monitoring requires
+separate OpenAI approval. ChatGPT subscription billing and API billing are
+separate; API usage requires its own billing configuration.
+
+**Verification scope:** mocked HTTP tests cover payload binding, gate-token
+verification, policy rejection, response parsing, key redaction, no-retry
+behavior, and ambiguous outcome classification. No live OpenAI API key or
+model has been configured, so live inference, model availability, and actual
+billing remain untested.
