@@ -123,6 +123,18 @@ class MemoryGateTests(unittest.TestCase):
         self.assertEqual(result.decision.reason, "audit_unavailable")
         self.assertEqual(calls, [])
 
+    def test_false_audit_result_blocks_before_model(self):
+        calls = []
+        gate = MemoryGate(
+            self.KEY, policy_version="v1", audit_sink=lambda event: False,
+            clock=lambda: self.now,
+        )
+        result = gate.execute(
+            self.request, self.snapshot, lambda *args: calls.append(args)
+        )
+        self.assertEqual(result.decision.reason, "audit_unavailable")
+        self.assertEqual(calls, [])
+
     def test_missing_memory_never_invokes_model(self):
         calls = []
         result = self.gate.execute(
