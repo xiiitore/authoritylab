@@ -7,6 +7,7 @@ from .execution import DockerSandboxRunner, ExecutionBlockedError, InProcessRunn
 from .governance import EvidenceSchema, GovernancePolicy
 from .memory_gate import GateDecision, GateExecution, GateRequest, InvocationOutcomeUnknown, MemoryGate, MemorySnapshot
 from .notion_memory_provider import NotionAPIClient, NotionAPIError, NotionMemoryProvider, extract_page_properties
+from .openai_responses_client import OpenAIAPIError, OpenAIResponsesClient
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
 from .loop_guardrails import ExecutionClaimAudit, GuardrailFinding, LoopDetector, ToolObservation, audit_execution_claim
 from .semantic_validation import SemanticValidationResult, SemanticValidatorRegistry
@@ -36,6 +37,8 @@ __all__ = [
     "NotionAPIClient",
     "NotionAPIError",
     "NotionMemoryProvider",
+    "OpenAIAPIError",
+    "OpenAIResponsesClient",
     "extract_page_properties",
     "SemanticValidationResult",
     "SemanticValidatorRegistry",
