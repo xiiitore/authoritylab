@@ -237,6 +237,7 @@ def main() -> None:
         server.serve_forever()
     finally:
         server.server_close()
+        service.idempotency_store.close()
 
 
 if __name__ == "__main__":
