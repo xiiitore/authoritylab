@@ -362,7 +362,6 @@ class MemoryGate:
             "policy_version": self.policy_version,
         }
         try:
-            self.audit_sink(event)
-            return True
+            return self.audit_sink(event) is not False
         except Exception:
             return False
