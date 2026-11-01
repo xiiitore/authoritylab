@@ -2,7 +2,12 @@ import base64
 import hashlib
 import unittest
 
-from authoritylab.memory_gate import GateRequest, MemoryGate, MemorySnapshot
+from authoritylab.memory_gate import (
+    GateRequest,
+    InvocationOutcomeUnknown,
+    MemoryGate,
+    MemorySnapshot,
+)
 
 
 class MemoryGateTests(unittest.TestCase):
@@ -163,6 +168,16 @@ class MemoryGateTests(unittest.TestCase):
         result = self.gate.execute(self.request, self.snapshot, broken_model)
         self.assertEqual(result.status, "FAIL")
         self.assertEqual(self.events[-1]["reason"], "model_invocation_failed")
+
+    def test_uncertain_provider_outcome_is_unknown_not_fail(self):
+        def unknown_model(*args):
+            raise InvocationOutcomeUnknown("response may have been created")
+
+        result = self.gate.execute(self.request, self.snapshot, unknown_model)
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertEqual(
+            self.events[-1]["reason"], "model_invocation_outcome_unknown"
+        )
 
     def test_post_call_audit_failure_is_unknown_not_pass(self):
         count = {"value": 0}
