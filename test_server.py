@@ -1,3 +1,4 @@
+import base64
 import http.client
 import json
 import os
@@ -5,12 +6,13 @@ import tempfile
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 
 from authoritylab.idempotency import SQLiteIdempotencyStore
 from authoritylab.memory_gate import MemoryGate, MemorySnapshot
 from authoritylab.memory_gate_service import MemoryGateService
 from authoritylab.openai_responses_client import OpenAIResponsesClient
-from authoritylab.server import make_handler
+from authoritylab.server import build_service_from_env, make_handler
 
 
 class FakeResponse:
@@ -109,6 +111,42 @@ class ServerTests(unittest.TestCase):
         data = response.read()
         connection.close()
         return response.status, json.loads(data.decode("utf-8"))
+
+    def test_startup_configuration_builds_without_network_calls(self):
+        signing = base64.urlsafe_b64encode(b"s" * 32).decode().rstrip("=")
+        audit = base64.urlsafe_b64encode(b"a" * 32).decode().rstrip("=")
+        env = {
+            "MEMORY_GATE_SIGNING_KEY_B64": signing,
+            "MEMORY_GATE_AUDIT_HMAC_KEY_B64": audit,
+            "MEMORY_GATE_CLIENT_TOKEN": "client-token-" + "x" * 32,
+            "MEMORY_GATE_SUBJECT_ID": "subject-startup",
+            "MEMORY_GATE_AUDIT_PATH": os.path.join(
+                self.temp.name, "audit", "audit.jsonl"
+            ),
+            "MEMORY_GATE_IDEMPOTENCY_PATH": os.path.join(
+                self.temp.name, "state", "idempotency.sqlite3"
+            ),
+            "NOTION_API_KEY": "notion-test-token",
+            "OPENAI_API_KEY": "openai-test-token",
+            "OPENAI_MODEL": "test-model",
+        }
+        with patch.dict("os.environ", env, clear=True):
+            service, max_request_bytes = build_service_from_env()
+        self.assertEqual(service.subject_id, "subject-startup")
+        self.assertEqual(max_request_bytes, 65_536)
+        self.assertTrue(os.path.exists(env["MEMORY_GATE_IDEMPOTENCY_PATH"]))
+
+    def test_startup_rejects_reused_signing_and_audit_keys(self):
+        key = base64.urlsafe_b64encode(
+            b"same-key-material-32-bytes-long!!"
+        ).decode().rstrip("=")
+        env = {
+            "MEMORY_GATE_SIGNING_KEY_B64": key,
+            "MEMORY_GATE_AUDIT_HMAC_KEY_B64": key,
+        }
+        with patch.dict("os.environ", env, clear=True):
+            with self.assertRaises(ValueError):
+                build_service_from_env()
 
     def test_health_endpoint(self):
         status, body = self.request("GET", "/health")
