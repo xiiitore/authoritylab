@@ -130,6 +130,10 @@ class GateDecision:
     expires_at: float | None = None
 
 
+class InvocationOutcomeUnknown(RuntimeError):
+    """The provider request may have executed without a reliable response."""
+
+
 @dataclass(frozen=True, slots=True)
 class GateExecution:
     status: str
@@ -286,6 +290,12 @@ class MemoryGate:
         assert isinstance(snapshot, MemorySnapshot)
         try:
             result = invoke_model(request, snapshot.content, decision.token)
+        except InvocationOutcomeUnknown:
+            self._record(
+                request, snapshot, "UNKNOWN",
+                "model_invocation_outcome_unknown",
+            )
+            return GateExecution("UNKNOWN", None, decision)
         except Exception:
             if not self._record(
                 request, snapshot, "FAIL", "model_invocation_failed"
