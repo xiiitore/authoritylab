@@ -98,8 +98,48 @@ class IdempotencyStoreTests(unittest.TestCase):
         os.makedirs(real_parent)
         link_parent = os.path.join(self.temp.name, "linked-parent")
         os.symlink(real_parent, link_parent)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(OSError):
             SQLiteIdempotencyStore(os.path.join(link_parent, "state.sqlite3"))
+
+    def test_fifo_database_path_is_rejected_without_blocking(self):
+        fifo = os.path.join(self.temp.name, "state", "requests.fifo")
+        os.mkfifo(fifo)
+        with self.assertRaises(ValueError):
+            SQLiteIdempotencyStore(fifo)
+
+    def test_insecure_parent_permissions_are_rejected(self):
+        parent = os.path.join(self.temp.name, "world-readable")
+        os.mkdir(parent, 0o755)
+        with self.assertRaises(PermissionError):
+            SQLiteIdempotencyStore(os.path.join(parent, "requests.sqlite3"))
+
+    def test_directory_replacement_cannot_redirect_database(self):
+        parent = os.path.dirname(self.path)
+        moved = os.path.join(self.temp.name, "state-pinned")
+        os.rename(parent, moved)
+        os.mkdir(parent, 0o700)
+        decoy = os.path.join(parent, os.path.basename(self.path))
+        with open(decoy, "wb") as handle:
+            handle.write(b"decoy database must remain untouched")
+
+        self.assertEqual(
+            self.store.claim(self.key, self.digest), "CLAIMED"
+        )
+        with open(decoy, "rb") as handle:
+            self.assertEqual(
+                handle.read(), b"decoy database must remain untouched"
+            )
+        self.assertTrue(
+            os.path.isfile(os.path.join(moved, os.path.basename(self.path)))
+        )
+
+    def test_closed_store_rejects_new_connections(self):
+        store = SQLiteIdempotencyStore(
+            os.path.join(self.temp.name, "closed", "requests.sqlite3")
+        )
+        store.close()
+        with self.assertRaises(Exception):
+            store.claim(self.key, self.digest)
 
     def test_concurrent_claims_only_have_one_winner(self):
         other_key = "parallel-request-key-0002"
