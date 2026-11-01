@@ -74,6 +74,33 @@ class IdempotencyStoreTests(unittest.TestCase):
         self.assertNotIn(self.key.encode(), database_bytes)
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
 
+    def test_symlink_database_path_is_rejected(self):
+        target = os.path.join(self.temp.name, "target.sqlite3")
+        with open(target, "wb") as handle:
+            handle.write(b"not-a-database")
+        link = os.path.join(self.temp.name, "state", "linked.sqlite3")
+        os.symlink(target, link)
+        with self.assertRaises(OSError):
+            SQLiteIdempotencyStore(link)
+
+    def test_hardlinked_database_path_is_rejected(self):
+        target = os.path.join(self.temp.name, "target.sqlite3")
+        with open(target, "wb") as handle:
+            handle.write(b"not-a-database")
+        linked = os.path.join(self.temp.name, "state", "linked.sqlite3")
+        os.makedirs(os.path.dirname(linked), exist_ok=True)
+        os.link(target, linked)
+        with self.assertRaises(ValueError):
+            SQLiteIdempotencyStore(linked)
+
+    def test_symlinked_parent_directory_is_rejected(self):
+        real_parent = os.path.join(self.temp.name, "real")
+        os.makedirs(real_parent)
+        link_parent = os.path.join(self.temp.name, "linked-parent")
+        os.symlink(real_parent, link_parent)
+        with self.assertRaises(ValueError):
+            SQLiteIdempotencyStore(os.path.join(link_parent, "state.sqlite3"))
+
     def test_concurrent_claims_only_have_one_winner(self):
         other_key = "parallel-request-key-0002"
         with ThreadPoolExecutor(max_workers=8) as pool:
