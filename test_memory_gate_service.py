@@ -193,6 +193,25 @@ class MemoryGateServiceTests(unittest.TestCase):
             self.store.get(self.key, self.service_digest(self.payload))
         )
 
+    def test_invalid_unicode_is_rejected_before_claim(self):
+        status, body = self.call(payload={"input": "\\ud800"})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["reason"], "invalid_unicode")
+        self.assertEqual(self.opener.requests, [])
+
+    def test_input_size_is_bounded(self):
+        service = MemoryGateService(
+            self.gate, self.provider, self.model, self.store,
+            subject_id="subject-1", client_token=self.client_token,
+            max_input_bytes=4,
+        )
+        status, body = service.handle_chat(
+            self.client_token, self.key, {"input": "too long"}
+        )
+        self.assertEqual(status, 413)
+        self.assertEqual(body["reason"], "input_too_large")
+        self.assertEqual(self.opener.requests, [])
+
     def test_invalid_output_limit_is_rejected(self):
         status, body = self.call(
             payload={"input": "question", "max_output_tokens": 999}
