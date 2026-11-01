@@ -60,7 +60,11 @@ class MemoryGateService:
         user_input = payload.get("input")
         if not isinstance(user_input, str) or not user_input.strip():
             return 400, {"status": "FAIL", "reason": "input_required"}
-        if len(user_input.encode("utf-8")) > self.max_input_bytes:
+        try:
+            input_bytes = user_input.encode("utf-8", "strict")
+        except UnicodeEncodeError:
+            return 400, {"status": "FAIL", "reason": "invalid_unicode"}
+        if len(input_bytes) > self.max_input_bytes:
             return 413, {"status": "FAIL", "reason": "input_too_large"}
         max_output_tokens = payload.get("max_output_tokens")
         if max_output_tokens is not None and (
