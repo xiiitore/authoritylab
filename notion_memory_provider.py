@@ -384,7 +384,9 @@ class NotionMemoryProvider:
         self.clock = clock
 
     @classmethod
-    def from_env(cls) -> "NotionMemoryProvider":
+    def from_env(
+        cls, *, max_context_bytes: int = 32_768
+    ) -> "NotionMemoryProvider":
         token = os.environ.get("NOTION_API_KEY")
         subject_id = os.environ.get("MEMORY_GATE_SUBJECT_ID")
         if not token or not subject_id:
@@ -392,7 +394,10 @@ class NotionMemoryProvider:
                 None, "configuration_missing",
                 "NOTION_API_KEY and MEMORY_GATE_SUBJECT_ID are required",
             )
-        return cls(NotionAPIClient(token), allowed_subject_id=subject_id)
+        return cls(
+            NotionAPIClient(token), allowed_subject_id=subject_id,
+            max_context_bytes=max_context_bytes,
+        )
 
     def retrieve(self, subject_id: str) -> MemorySnapshot:
         if subject_id != self.allowed_subject_id:
