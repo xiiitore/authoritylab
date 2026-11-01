@@ -10,6 +10,7 @@ import stat
 import time
 from collections.abc import Callable
 from contextlib import closing
+from urllib.parse import quote
 
 _KEY_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{16,128}$")
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -25,7 +26,12 @@ class IdempotencyConflict(IdempotencyError):
 
 
 class SQLiteIdempotencyStore:
-    """SQLite-backed claims; raw idempotency keys are never persisted."""
+    """SQLite claims rooted at a pinned, private directory descriptor.
+
+    SQLite opens the database through /proc/self/fd/<dirfd>/<name>, so later
+    path replacement cannot redirect connections to a different directory.
+    The containing directory must be owned by this process and mode 0700.
+    """
 
     def __init__(
         self,
@@ -44,40 +50,101 @@ class SQLiteIdempotencyStore:
             raise ValueError("lease_seconds must be positive and finite")
         if not callable(clock):
             raise ValueError("clock must be callable")
+        if os.name != "posix" or not os.path.isdir("/proc/self/fd"):
+            raise OSError("safe SQLite path requires POSIX procfs")
         self.path = os.path.abspath(path)
+        self.name = os.path.basename(self.path)
+        if self.name in ("", ".", ".."):
+            raise ValueError("idempotency filename is invalid")
         self.lease_seconds = float(lease_seconds)
         self.clock = clock
-        self._prepare_file()
-        self._initialize()
+        self._parent_fd: int | None = self._open_parent_directory()
+        try:
+            self._prepare_file()
+            self._initialize()
+        except BaseException:
+            self.close()
+            raise
+
+    def _open_parent_directory(self) -> int:
+        """Walk from / using dirfd + O_NOFOLLOW; never follow path symlinks."""
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        directory = getattr(os, "O_DIRECTORY", None)
+        if (
+            nofollow is None or directory is None
+            or os.open not in os.supports_dir_fd
+            or os.mkdir not in os.supports_dir_fd
+        ):
+            raise OSError("platform lacks safe descriptor-relative directory APIs")
+        flags = os.O_RDONLY | directory | os.O_CLOEXEC | nofollow
+        descriptor = os.open(os.sep, flags)
+        try:
+            parent = os.path.dirname(self.path)
+            components = [part for part in parent.split(os.sep) if part]
+            for component in components:
+                try:
+                    child = os.open(component, flags, dir_fd=descriptor)
+                except FileNotFoundError:
+                    try:
+                        os.mkdir(component, 0o700, dir_fd=descriptor)
+                    except FileExistsError:
+                        pass
+                    child = os.open(component, flags, dir_fd=descriptor)
+                    os.fchmod(child, 0o700)
+                metadata = os.fstat(child)
+                if not stat.S_ISDIR(metadata.st_mode):
+                    os.close(child)
+                    raise ValueError(
+                        "idempotency parent path must contain only directories"
+                    )
+                os.close(descriptor)
+                descriptor = child
+            metadata = os.fstat(descriptor)
+            if metadata.st_uid != os.geteuid():
+                raise PermissionError(
+                    "idempotency parent directory must be owned by this process"
+                )
+            if stat.S_IMODE(metadata.st_mode) & 0o077:
+                raise PermissionError(
+                    "idempotency parent directory must have private 0700 permissions"
+                )
+            return descriptor
+        except BaseException:
+            os.close(descriptor)
+            raise
 
     def _prepare_file(self) -> None:
-        parent = os.path.dirname(self.path)
-        os.makedirs(parent, mode=0o700, exist_ok=True)
-        if os.path.realpath(parent) != parent:
-            raise ValueError(
-                "idempotency parent path may not traverse symlinks"
-            )
-        parent_stat = os.lstat(parent)
-        if not stat.S_ISDIR(parent_stat.st_mode):
-            raise ValueError("idempotency parent must be a real directory")
-        nofollow = getattr(os, "O_NOFOLLOW", None)
-        if nofollow is None:
-            raise OSError("platform lacks O_NOFOLLOW support")
-        flags = os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | nofollow
-        descriptor = os.open(self.path, flags, 0o600)
+        assert self._parent_fd is not None
+        flags = (
+            os.O_CREAT | os.O_RDWR | os.O_CLOEXEC
+            | os.O_NOFOLLOW | os.O_NONBLOCK
+        )
+        descriptor = os.open(
+            self.name, flags, 0o600, dir_fd=self._parent_fd
+        )
         try:
             metadata = os.fstat(descriptor)
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_uid != os.geteuid()
+            ):
                 raise ValueError(
-                    "idempotency path must be a private regular file"
+                    "idempotency path must be an owned, single-link regular file"
                 )
             os.fchmod(descriptor, 0o600)
         finally:
             os.close(descriptor)
 
     def _connect(self) -> sqlite3.Connection:
+        if self._parent_fd is None:
+            raise IdempotencyError("idempotency store is closed")
+        pinned_path = (
+            f"/proc/self/fd/{self._parent_fd}/{quote(self.name, safe='')}"
+        )
         connection = sqlite3.connect(
-            self.path, timeout=5, isolation_level=None
+            f"file:{pinned_path}?mode=rw",
+            uri=True, timeout=5, isolation_level=None,
         )
         connection.execute("PRAGMA busy_timeout=5000")
         connection.execute("PRAGMA synchronous=FULL")
@@ -94,7 +161,12 @@ class SQLiteIdempotencyStore:
                     updated_at REAL NOT NULL
                 )"""
             )
-        os.chmod(self.path, 0o600)
+
+    def close(self) -> None:
+        """Close the pinned directory descriptor."""
+        if self._parent_fd is not None:
+            os.close(self._parent_fd)
+            self._parent_fd = None
 
     @staticmethod
     def _validate(key: str, request_digest: str) -> str:
