@@ -228,6 +228,21 @@ class MemoryGate:
             snapshot.digest, expires,
         )
 
+    def block(
+        self,
+        request: GateRequest,
+        snapshot: MemorySnapshot | None,
+        reason: str,
+    ) -> GateDecision:
+        """Record a pre-inference block with a bounded reason code."""
+        allowed = "abcdefghijklmnopqrstuvwxyz0123456789_"
+        if (
+            not isinstance(reason, str) or not 1 <= len(reason) <= 64
+            or any(char not in allowed for char in reason)
+        ):
+            raise ValueError("block reason must be a lowercase reason code")
+        return self._blocked(request, snapshot, reason)
+
     def verify_token(self, token: str, request: GateRequest) -> bool:
         """Verify signature, expiry, policy version, and request binding."""
         if not isinstance(request, GateRequest) or not isinstance(token, str):
