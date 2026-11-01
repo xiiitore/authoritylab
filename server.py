@@ -225,7 +225,7 @@ def make_handler(
 
 def main() -> None:
     service, max_request_bytes = build_service_from_env()
-    host = os.environ.get("MEMORY_GATE_HOST", "0.0.0.0")
+    host = os.environ.get("MEMORY_GATE_HOST", "127.0.0.1")
     port = _env_int("PORT", 8000)
     handler = make_handler(
         service, max_request_bytes=max_request_bytes
