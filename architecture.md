@@ -139,3 +139,66 @@ verification, policy rejection, response parsing, key redaction, no-retry
 behavior, and ambiguous outcome classification. No live OpenAI API key or
 model has been configured, so live inference, model availability, and actual
 billing remain untested.
+
+
+### HTTP service, durable idempotency, and deployment boundary
+
+`MemoryGateService` composes Notion retrieval, the signed Memory Gate,
+the gated Responses client, and a persistent SQLite idempotency store.
+`server.py` exposes only:
+
+- `GET /health`: process liveness only; it does not prove Notion/OpenAI
+  readiness.
+- `POST /v1/chat`: bearer-authenticated JSON request with mandatory
+  `Idempotency-Key`; accepted body fields are only `input` and optional
+  `max_output_tokens`.
+
+The HTTP layer rejects non-JSON, oversized, malformed, and unsupported
+requests. It disables access logging, sets `Cache-Control: no-store`, adds
+`X-Content-Type-Options: nosniff`, and does not enable CORS. The service is
+single-user and text-only. It has no UI, streaming, attachments, external
+tools, or conversation chaining yet.
+
+`SQLiteIdempotencyStore` uses a private regular file, `O_NOFOLLOW`,
+0600 permissions, SQLite full synchronous writes, and an immediate
+transaction for atomic claims. It stores only a SHA-256 hash of the
+idempotency key, the inbound request digest, status, and timestamps; it does
+not persist prompts or model output. Reuse with a different request conflicts.
+A stale `IN_PROGRESS` claim becomes `UNKNOWN`, never a fresh claim. A
+completed duplicate is not sent to OpenAI again; its output is not retained,
+so the first response must be saved by the calling client. Ambiguous model
+outcomes remain `UNKNOWN` and are not retried.
+
+Required server environment:
+
+- `NOTION_API_KEY`, `MEMORY_GATE_SUBJECT_ID`
+- `OPENAI_API_KEY`, `OPENAI_MODEL`
+- `MEMORY_GATE_SIGNING_KEY_B64`, `MEMORY_GATE_AUDIT_HMAC_KEY_B64`
+  (distinct URL-safe base64 keys, each decoding to at least 32 bytes)
+- `MEMORY_GATE_CLIENT_TOKEN` (at least 32 characters)
+- `MEMORY_GATE_AUDIT_PATH`, `MEMORY_GATE_IDEMPOTENCY_PATH`
+  (different paths on durable storage)
+
+Optional bounded policy variables include
+`MEMORY_GATE_MAX_CONTEXT_BYTES`,
+`MEMORY_GATE_MAX_INPUT_BYTES`,
+`MEMORY_GATE_MAX_REQUEST_BYTES`,
+`MEMORY_GATE_MAX_OUTPUT_TOKENS`,
+`MEMORY_GATE_MAX_AGE_SECONDS`,
+`MEMORY_GATE_TOKEN_TTL_SECONDS`,
+`MEMORY_GATE_IDEMPOTENCY_LEASE_SECONDS`, `MEMORY_GATE_POLICY_VERSION`,
+`MEMORY_GATE_HOST`, and `PORT`. Startup verifies the existing durable
+audit chain and fails if required credentials or persistent paths are absent.
+
+**Hard-enforcement boundary:** this service enforces only requests routed
+through its own authenticated `/v1/chat` endpoint. It cannot intercept or
+gate ordinary native ChatGPT app conversations. A separate client or UI must
+send requests through this endpoint; direct calls to OpenAI or native ChatGPT
+remain outside this gateway.
+
+**Deployment state:** no Render service, persistent disk, API credential, or
+live Notion/OpenAI request has been created or verified. The Render workspace
+listing succeeded, but the service-list tool returned a null result; service
+inventory is therefore still unknown. Do not create paid Render resources or
+enable API spending without explicit cost approval. API billing is separate
+from ChatGPT subscription billing.
