@@ -155,7 +155,12 @@ the gated Responses client, and a persistent SQLite idempotency store.
 
 The HTTP layer rejects non-JSON, oversized, malformed, and unsupported
 requests. It disables access logging, sets `Cache-Control: no-store`, adds
-`X-Content-Type-Options: nosniff`, and does not enable CORS. The service is
+`X-Content-Type-Options: nosniff`, and does not enable CORS. The listener
+defaults to loopback (`127.0.0.1`); exposing it on `0.0.0.0` requires an
+explicit `MEMORY_GATE_HOST` setting and a trusted TLS-terminating reverse
+proxy/platform edge. The application server itself speaks plain HTTP and does
+not implement TLS, rate limiting, or edge-level denial-of-service protection.
+Never expose its plain HTTP port directly to the public internet. The service is
 single-user and text-only. It has no UI, streaming, attachments, external
 tools, or conversation chaining yet.
 
