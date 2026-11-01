@@ -80,6 +80,8 @@ def build_service_from_env() -> tuple[MemoryGateService, int]:
     subject_id = _required_env("MEMORY_GATE_SUBJECT_ID")
     audit_path = _required_env("MEMORY_GATE_AUDIT_PATH")
     idempotency_path = _required_env("MEMORY_GATE_IDEMPOTENCY_PATH")
+    if not os.path.isabs(audit_path) or not os.path.isabs(idempotency_path):
+        raise ValueError("audit and idempotency paths must be absolute")
     if os.path.abspath(audit_path) == os.path.abspath(idempotency_path):
         raise ValueError("audit and idempotency paths must be different")
     max_context_bytes = _env_int(
