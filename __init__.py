@@ -5,7 +5,7 @@ from .authorization import AuthorizationDecision, AuthorizationRequest, Authoriz
 from .core import WorkflowCore
 from .execution import DockerSandboxRunner, ExecutionBlockedError, InProcessRunner, SubprocessHandlerRunner
 from .governance import EvidenceSchema, GovernancePolicy
-from .memory_gate import GateDecision, GateExecution, GateRequest, MemoryGate, MemorySnapshot
+from .memory_gate import GateDecision, GateExecution, GateRequest, InvocationOutcomeUnknown, MemoryGate, MemorySnapshot
 from .notion_memory_provider import NotionAPIClient, NotionAPIError, NotionMemoryProvider, extract_page_properties
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
 from .loop_guardrails import ExecutionClaimAudit, GuardrailFinding, LoopDetector, ToolObservation, audit_execution_claim
@@ -30,6 +30,7 @@ __all__ = [
     "GuardrailFinding",
     "LoopDetector",
     "InProcessRunner",
+    "InvocationOutcomeUnknown",
     "MemoryGate",
     "MemorySnapshot",
     "NotionAPIClient",
