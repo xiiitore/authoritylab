@@ -5,6 +5,7 @@ from .authorization import AuthorizationDecision, AuthorizationRequest, Authoriz
 from .core import WorkflowCore
 from .execution import DockerSandboxRunner, ExecutionBlockedError, InProcessRunner, SubprocessHandlerRunner
 from .governance import EvidenceSchema, GovernancePolicy
+from .memory_gate import GateDecision, GateExecution, GateRequest, MemoryGate, MemorySnapshot
 from .models import CheckResult, CheckStatus, Task, ToolResult, WorkflowReport, WorkflowStatus
 from .loop_guardrails import ExecutionClaimAudit, GuardrailFinding, LoopDetector, ToolObservation, audit_execution_claim
 from .semantic_validation import SemanticValidationResult, SemanticValidatorRegistry
@@ -21,10 +22,15 @@ __all__ = [
     "EvidenceSchema",
     "ExecutionClaimAudit",
     "ExecutionBlockedError",
+    "GateDecision",
+    "GateExecution",
+    "GateRequest",
     "GovernancePolicy",
     "GuardrailFinding",
     "LoopDetector",
     "InProcessRunner",
+    "MemoryGate",
+    "MemorySnapshot",
     "SemanticValidationResult",
     "SemanticValidatorRegistry",
     "SubprocessHandlerRunner",
