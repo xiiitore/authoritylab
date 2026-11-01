@@ -37,3 +37,44 @@ Semantic validation is opt-in for compatibility. Without a registry, the workflo
 ## Boundaries
 
 The default runner is in-process. The optional subprocess runner adds process separation and resource limits but is not a security sandbox: it uses the same OS identity and does not isolate filesystem or network access. The optional Docker runner provides a stronger container boundary only when the target Docker daemon, host, and digest-pinned image are trusted and correctly configured. It accepts only importable top-level handlers and JSON-serializable task data/results; the handler module must be present in the image. Unit tests mock Docker CLI execution, so a real deployment still needs target-environment and adversarial integration tests. The project does not implement plugin discovery, authentication, or distributed scheduling.
+
+
+## Pre-inference Memory Gate (experimental)
+
+The `MemoryGate` module is a fail-closed policy primitive for an application that
+must retrieve user-scoped memory before model inference.
+
+- The trusted host adapter supplies a `GateRequest` bound to the exact outbound
+  request digest and a `MemorySnapshot` containing scoped content, source IDs,
+  retrieval time, and provider version.
+- The gate checks subject scope, memory age/future timestamp, context size, and
+  request/snapshot provenance. It issues a short-lived HMAC-SHA256 token bound
+  to the request digest, policy version, memory snapshot digest, and hashed
+  subject/request/source identifiers.
+- `execute` invokes the supplied model callback only after memory validation,
+  token verification, and a successful pre-invocation audit write. If the
+  pre-invocation audit sink fails, the model callback is not invoked. If the
+  post-invocation audit write fails, the result is `UNKNOWN`, not `PASS`.
+- Audit events contain digests and hashed identifiers, not raw memory content
+  or raw subject IDs.
+
+### Enforcement boundary and limitations
+
+This module is not an HTTP proxy, Notion client, OpenAI client, or authentication
+provider. The host must retrieve memory from an authenticated user-scoped source,
+supply a durable audit sink, and keep provider credentials inaccessible to
+callers. Every model invocation must be routed through the controlled executor;
+otherwise a caller can bypass the library and invoke the provider directly.
+
+The signed token is short-lived but this initial module does not maintain a
+distributed single-use nonce/replay store. The nonce is an integrity-bound
+identifier, not proof of one-time use. The module does not authenticate the
+memory provider or prove that memory content is factually correct.
+
+Accordingly, this library alone is **not** `ENFORCED_BY_HOST`. That status
+requires a deployed host boundary, credential isolation, real Notion and model
+adapters, and independent tests proving direct calls cannot bypass the gate.
+
+**Current scope:** library primitive and local regression tests only. No external
+credentials, Notion integration, HTTP service, or production deployment are
+included in this change.
