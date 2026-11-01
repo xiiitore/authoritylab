@@ -36,6 +36,19 @@ class MemoryGateTests(unittest.TestCase):
         self.assertEqual(decision.status, "PASS")
         self.assertTrue(self.gate.verify_token(decision.token, self.request))
 
+    def test_explicit_block_records_machine_reason(self):
+        decision = self.gate.block(
+            self.request, self.snapshot, "provider_configuration_invalid"
+        )
+        self.assertEqual(decision.status, "BLOCKED")
+        self.assertEqual(
+            self.events[-1]["reason"], "provider_configuration_invalid"
+        )
+
+    def test_explicit_block_rejects_unbounded_reason(self):
+        with self.assertRaises(ValueError):
+            self.gate.block(self.request, self.snapshot, "invalid reason")
+
     def test_missing_memory_blocks(self):
         decision = self.gate.authorize(self.request, None)
         self.assertEqual(decision.reason, "memory_unavailable")
