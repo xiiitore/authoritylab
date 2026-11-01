@@ -78,3 +78,33 @@ adapters, and independent tests proving direct calls cannot bypass the gate.
 **Current scope:** library primitive and local regression tests only. No external
 credentials, Notion integration, HTTP service, or production deployment are
 included in this change.
+
+
+### Notion memory source adapter (experimental)
+
+`NotionMemoryProvider` uses a separate server-side Notion integration token
+(`NOTION_API_KEY`) and a configured authenticated subject
+(`MEMORY_GATE_SUBJECT_ID`). It reads the current workspace's Memories,
+Memory Archive, Memory Projects, Memory Relations, and Memory Sources data
+sources, plus the About and Operating Rules pages. It uses Notion API version
+`2026-03-11`, data-source query pagination, recursive block-child retrieval,
+a conservative request interval, and bounded 429 retries.
+
+The provider returns a `MemorySnapshot` with the fetched page/data-source IDs,
+a version digest derived from page edit timestamps, and a retrieval timestamp.
+It fails closed on subject mismatch, missing configuration, API/network errors,
+malformed pages, missing required pages, or context-size overflow. It excludes
+email and phone-number properties from extracted page metadata. It performs no
+Notion writes and does not fall back to cached memory when Notion is unavailable.
+
+The integration must have read-content capability and explicit access to every
+configured data source and page. The ChatGPT Notion connector's session/token is
+not inherited by this server; the server requires its own Notion integration
+credential, stored only in the host's secret environment.
+
+**Verification scope:** mocked HTTP tests cover endpoint/version headers,
+pagination, nested blocks, 429 retry, unauthorized response sanitization,
+subject scoping, bounded context, and environment configuration. No live Notion
+API credential has been supplied, so live authentication and retrieval remain
+untested. The provider currently loads all rows from the small configured memory
+data sources; relevance ranking and caching are intentionally deferred.
