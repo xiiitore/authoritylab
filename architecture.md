@@ -202,3 +202,35 @@ listing succeeded, but the service-list tool returned a null result; service
 inventory is therefore still unknown. Do not create paid Render resources or
 enable API spending without explicit cost approval. API billing is separate
 from ChatGPT subscription billing.
+
+
+### Current hosting and API cost gate (checked 2026-11-01)
+
+The current design requires durable local audit and idempotency files. Render
+Free web services cannot attach persistent disks, spin down after 15 minutes
+idle, and lose local filesystem changes on restarts/redeploys. They therefore
+do not satisfy this implementation's durability and availability requirements.
+
+Render's published pricing currently lists the Starter web-service compute
+plan at **$7/month** (512 MB RAM) and persistent SSD storage at
+**$0.25/GB/month**. A 1 GB disk gives an indicative minimum of about
+**$7.25/month**, before taxes, bandwidth overages, and OpenAI API usage.
+A persistent disk is restricted to a single service instance and prevents
+horizontal scaling/zero-downtime deploys; this is acceptable for the current
+single-instance design but must remain explicit.
+
+OpenAI API usage is billed separately from ChatGPT Free. A separate API
+organization/payment method or prepaid balance is required for paid API
+requests. Configure a hard project/organization spend limit and review it
+before enabling the service; output-token caps alone do not cap all costs.
+
+No paid Render resource, disk, OpenAI API billing, or API key has been
+activated. Deployment remains **BLOCKED pending explicit cost approval and
+credentials**.
+
+Reference pages checked:
+- https://render.com/pricing
+- https://render.com/docs/free
+- https://render.com/docs/disks
+- https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform
+- https://help.openai.com/en/articles/6614457-troubleshooting-api-usage-and-spend-limits
