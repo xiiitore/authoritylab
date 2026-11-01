@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from authoritylab.idempotency import (
     IdempotencyConflict,
+    IdempotencyError,
     SQLiteIdempotencyStore,
 )
 
@@ -138,7 +139,7 @@ class IdempotencyStoreTests(unittest.TestCase):
             os.path.join(self.temp.name, "closed", "requests.sqlite3")
         )
         store.close()
-        with self.assertRaises(Exception):
+        with self.assertRaises(IdempotencyError):
             store.claim(self.key, self.digest)
 
     def test_concurrent_claims_only_have_one_winner(self):
