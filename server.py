@@ -231,7 +231,8 @@ def main() -> None:
         service, max_request_bytes=max_request_bytes
     )
     server = ThreadingHTTPServer((host, port), handler)
-    server.daemon_threads = True
+    server.daemon_threads = False
+    server.block_on_close = True
     server.allow_reuse_address = True
     try:
         server.serve_forever()
